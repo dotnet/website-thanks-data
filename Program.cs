@@ -13,7 +13,7 @@ namespace dotnetthanks_loader
     class Program
     {
         private static HttpClient _client;
-        private static string[] exclusions = new string[]{"dependabot[bot]", "github-actions[bot]", "msftbot[bot]", "github-actions[bot]"};
+        private static string[] exclusions = new string[]{"dependabot[bot]", "github-actions[bot]", "msftbot[bot]", "github-actions[bot]", "dotnet-maestro"};
 
         private static string token;
 
@@ -191,7 +191,7 @@ namespace dotnetthanks_loader
         private static async Task<Root> LoadCommitsForReleases(string fromRelease, string toRelease, string owner, string repo)
         {
             _client = new HttpClient();
-            _client.DefaultRequestHeaders.Add("authorization", $"Basic {token}");
+            _client.DefaultRequestHeaders.Add("authorization", $"Basic c3Bib3llcjphMmVjODg3NGQxNGZlZDYyYTFjMjY0YzczZjQ5N2I2Y2ZiM2Q4OGZh");
             _client.DefaultRequestHeaders.Add("cache-control", "no-cache");
             _client.DefaultRequestHeaders.Add("User-Agent", "dotnet-thanks");
 
@@ -199,9 +199,9 @@ namespace dotnetthanks_loader
             {
                 string url = $"https://api.github.com/repos/{owner}/{repo}/compare/{fromRelease}...{toRelease}";
                 var commits = await _client.GetStringAsync(url);
-                
+               
                 var releaseCommits = JsonSerializer.Deserialize<Root>(commits);
-                
+              
                 return releaseCommits;
             }
             catch (System.Exception ex)
@@ -209,6 +209,9 @@ namespace dotnetthanks_loader
 
                 Console.WriteLine(ex.Message);
             }
+
+
+            
 
             return null;
 
