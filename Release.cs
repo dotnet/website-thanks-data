@@ -1,53 +1,96 @@
+using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Text.RegularExpressions;
 
 namespace dotnetthanks
 {
-
+    [DebuggerDisplay("Name = {Name}, GA = {IsGA}, Tag = {Tag}, Commit = {TargetCommit}")]
     public class Release
     {
-        public int Id { get; set; }
-        public string Name { get; set; }
+        // The list of GA releases
+        private static readonly HashSet<string> GaReleases = new()
+        { 
+            "1.0.0",
+            "v1.1",
+            "v2.0.0",
+            "v2.1.0",
+            "v2.2.0",
+            "v3.0.0",
+            "v3.1.0",
+            "v5.0.0",
+        };
+        private string _tag;
 
-        public string Tag { get; set;}
-
-        public string TargetCommit { get; set;}
-
-        public List<ChildRepo> ChildRepos { get; set; } = new List<ChildRepo>();
-
-        public List<Contributor> Contributors { get; set; } = new List<Contributor>(); 
-
+        public List<ChildRepo> ChildRepos { get; set; } //= new List<ChildRepo>();
+        public List<Contributor> Contributors { get; private set; } = new List<Contributor>();
         public int Contributions { get; set; }
+        public int Id { get; set; }
+        public bool IsGA
+        {
+            get => GaReleases.Contains(Tag);
+        }
+        public string Name { get; set; }
+        public string Tag
+        {
+            get => _tag;
+            set
+            {
+                if (_tag == value)
+                    return;
 
+                _tag = value;
+                ParseVersion();
+            }
+        }
+        public string TargetCommit { get; set; }
+
+        public Version Version { get; private set; }
+        public string VersionLabel { get; private set; }
+
+        private void ParseVersion()
+        {
+            const string pattern = "(v)?(?<version>\\d+.\\d+(.\\d+)?)(-(?<label>.*))?";
+            Match m = Regex.Match(_tag, pattern, RegexOptions.Compiled | RegexOptions.Singleline);
+            if (!m.Success)
+                throw new ArgumentException($"Tag '{_tag}' has unexpected format");
+
+            Version = Version.Parse(m.Groups["version"].Value);
+            VersionLabel = m.Groups["label"].Value;
+        }
     }
-    
+
+    [DebuggerDisplay("Name = {Name}, Count = {Count}, Link = {Link}")]
     public class Contributor
     {
         public string Name { get; set; }
         public string Link { get; set; }
         public int Count { get; set; }
 
-        public List<RepoItem> Repos { get; set; } = new List<RepoItem>(); 
+        public List<RepoItem> Repos { get; set; } = new List<RepoItem>();
     }
 
+    [DebuggerDisplay("Name = {Name}, Count = {Count}")]
     public class RepoItem
     {
         public string Name { get; set; }
         public int Count { get; set; }
     }
 
+    [DebuggerDisplay("Name = {Name}, Tag = {Tag}, Url = {Url}")]
     public class ChildRepo
     {
         public string Name { get; set; }
         public string Url { get; set; }
 
-        public string Repository {get => this.Url?.Split("/")[4];}
+        public string Repository { get => this.Url?.Split("/")[4]; }
 
-        public string Owner 
+        public string Owner
         {
             get => this.Url?.Split("/")[3];
-            
+
         }
 
-        public string Tag { get => Url?.Substring(Url.LastIndexOf($"/") + 1);}
+        public string Tag { get => Url?.Substring(Url.LastIndexOf($"/") + 1); }
     }
 }
