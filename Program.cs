@@ -17,6 +17,7 @@ namespace dotnetthanks_loader
         private static readonly string[] exclusions = new string[] { "dependabot[bot]", "github-actions[bot]", "msftbot[bot]", "github-actions[bot]", "dotnet-bot", "dotnet bot", "nuget team bot" };
         private static string _token;
 
+
         private static GitHubClient _ghclient;
 
         static async Task Main(string[] args)
@@ -224,6 +225,7 @@ namespace dotnetthanks_loader
         private static async Task<Root> LoadCommitsForReleasesAsync(string fromRelease, string toRelease, string owner, string repo)
         {
             _client = new HttpClient();
+
             _client.DefaultRequestHeaders.Add("authorization", $"Basic {_token}");
             _client.DefaultRequestHeaders.Add("cache-control", "no-cache");
             _client.DefaultRequestHeaders.Add("User-Agent", "dotnet-thanks");
@@ -242,6 +244,7 @@ namespace dotnetthanks_loader
 
                 Console.WriteLine(ex.Message);
             }
+
 
             return null;
 
