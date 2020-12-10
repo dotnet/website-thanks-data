@@ -180,6 +180,10 @@ namespace dotnetthanks_loader
                                 repoItem.Count += 1;
                             }
                         }
+                    } 
+                    else
+                    {
+                         Console.WriteLine(author.name.ToLower());
                     }
                 }
             }
