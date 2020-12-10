@@ -14,7 +14,7 @@ namespace dotnetthanks_loader
     class Program
     {
         private static HttpClient _client;
-        private static readonly string[] exclusions = new string[] { "dependabot[bot]", "github-actions[bot]", "msftbot[bot]", "github-actions[bot]" };
+        private static readonly string[] exclusions = new string[] { "dependabot[bot]", "github-actions[bot]", "msftbot[bot]", "github-actions[bot]", "dotnet-bot", "dotnet bot", "nuget team bot" };
         private static string _token;
 
         private static GitHubClient _ghclient;
@@ -30,7 +30,8 @@ namespace dotnetthanks_loader
             _token = config.GetSection("GITHUB_TOKEN").Value;
 
             _ghclient = new GitHubClient(new ProductHeaderValue("dotnet-thanks"));
-            var basic = new Credentials(_token);
+            //var basic = new Credentials(_token);
+            var basic = new Credentials(config.GetSection("GITHUB_CLIENTID").Value,config.GetSection("GITHUB_CLIENTSECRET").Value);
             _ghclient.Credentials = basic;
 
             var repo = "core";
@@ -148,7 +149,7 @@ namespace dotnetthanks_loader
                     if (String.IsNullOrEmpty(author.name))
                         author.name = "Unknown";
 
-                    if (!exclusions.Contains(author.name))
+                    if (!exclusions.Contains(author.name.ToLower()))
                     {
                         // find if the author has been counted
                         var person = core.Contributors.Find(p => p.Name == author.name);
