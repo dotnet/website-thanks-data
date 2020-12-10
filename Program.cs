@@ -1,71 +1,113 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Net.Http;
 using System.Text.Json;
 using System.Threading.Tasks;
 using dotnetthanks;
-using Octokit;
 using Microsoft.Extensions.Configuration;
+using Octokit;
 
 namespace dotnetthanks_loader
 {
     class Program
     {
         private static HttpClient _client;
-        private static string[] exclusions = new string[]{"dependabot[bot]", "github-actions[bot]", "msftbot[bot]", "github-actions[bot]", "dotnet-maestro"};
+        private static readonly string[] exclusions = new string[] { "dependabot[bot]", "github-actions[bot]", "msftbot[bot]", "github-actions[bot]", "dotnet-bot", "dotnet bot", "nuget team bot" };
+        private static string _token;
 
-        private static string token;
 
         private static GitHubClient _ghclient;
 
         static async Task Main(string[] args)
         {
-
             var config = new ConfigurationBuilder()
                 .SetBasePath(AppDomain.CurrentDomain.BaseDirectory)
                 .AddEnvironmentVariables()
                 .AddUserSecrets<Program>()
                 .Build();
 
-            token = config.GetSection("GITHUB_TOKEN").Value;
+            _token = config.GetSection("GITHUB_TOKEN").Value;
 
             _ghclient = new GitHubClient(new ProductHeaderValue("dotnet-thanks"));
-            var basic = new Credentials(token);
+            //var basic = new Credentials(_token);
+            var basic = new Credentials(config.GetSection("GITHUB_CLIENTID").Value,config.GetSection("GITHUB_CLIENTSECRET").Value);
             _ghclient.Credentials = basic;
 
             var repo = "core";
 
             // load all releases for dotnet/core
-            var allReleases = await LoadReleases(repo);
+            IEnumerable<dotnetthanks.Release> allReleases = await LoadReleasesAsync(repo);
 
-            var sortedReleases = allReleases.OrderBy(o => o.Id).ToList();
+            // Sort releases from the yongest to the oldest by version
+            // E.g.
+            //      5.0.1
+            //      5.0.0       // GA
+            //      5.0.0-RC2
+            //      5.0.0-RC1
+            //      5.0.0-preview9
+            //      ...
+            //      5.0.0-preview2
+            //      3.1.10
+            //      3.1.9
+            //      3.1.8
+            //      ...
+            //      3.1.0       // GA
+            //      ...
+            //
+            var sortedReleases = allReleases
+                .OrderByDescending(o => o.Version).ThenByDescending(o => o.Id)
+                .ToList();
 
-            dotnetthanks.Release toRelease;
-
-
-            Console.WriteLine($"{repo} - {sortedReleases.Count.ToString()}");
+            Console.WriteLine($"{repo} - {sortedReleases.Count}");
 
             // dotnet/core
-            for (int i = sortedReleases.Count - 1; i >= 1; i--)
+            dotnetthanks.Release currentRelease;
+            dotnetthanks.Release previousRelease;
+            for (int i = 0; i < sortedReleases.Count - 1; i++)
             {
-                toRelease = sortedReleases[i];
-                Console.WriteLine($"Processing: {repo} - {i.ToString()} : {toRelease.Tag}");
-                
-                // for each child repo get commits and count contribs
-                foreach (var child in toRelease.ChildRepos)
+                currentRelease = sortedReleases[i];
+                previousRelease = GetPreviousRelease(sortedReleases, currentRelease, i + 1);
+                if (previousRelease is null)
                 {
+                    // Is this the first release?
+                    Console.WriteLine($"[INFO]: {currentRelease.Tag} is the first release in the series.");
+                    Debugger.Break();
+                    continue;
+                }
+
+                Console.WriteLine($"Processing:[{i}] {repo} {previousRelease.Tag}..{currentRelease.Tag}");
+
+                // for each child repo get commits and count contribs
+                foreach (var repoCurrentRelease in currentRelease.ChildRepos)
+                {
+                    var repoPrevRelease = previousRelease.ChildRepos.FirstOrDefault(r => r.Owner == repoCurrentRelease.Owner &&
+                                                                                         r.Repository == repoCurrentRelease.Repository);
+                    if (repoPrevRelease is null)
+                    {
+                        // This may happen
+                        Console.WriteLine($"[ERROR]: {repoCurrentRelease.Url} doesn't exist in {previousRelease.Tag}!");
+                        continue;
+                    }
+
+                    Debug.WriteLine($"{repoCurrentRelease.Tag} : {repoCurrentRelease.Name}");
+
                     try
                     {
-                        Console.WriteLine($"Processing Child : {child.Name}:{child.Tag}");
-                        var childRelease = await LoadRelease(child.Owner, child.Repository, child.Tag);
-                        var childRoot = await LoadCommitsForReleases(childRelease.Tag, childRelease.TargetCommit, child.Owner, child.Repository);
-
-                        if (childRoot != null && childRoot.total_commits > 0)
+                        Console.WriteLine($"\tProcessing: {repoCurrentRelease.Name}: {repoPrevRelease.Tag}..{repoCurrentRelease.Tag}");
+                        var releaseDiff = await LoadCommitsForReleasesAsync(repoPrevRelease.Tag,
+                                                                            repoCurrentRelease.Tag,
+                                                                            repoCurrentRelease.Owner,
+                                                                            repoCurrentRelease.Repository);
+                        if (releaseDiff is null || releaseDiff.total_commits < 1)
                         {
-                            toRelease.Contributions += childRoot.total_commits;
-                            TallyCommits(toRelease, childRelease, childRoot);
+                            Debugger.Break();
+                            continue;
                         }
+
+                        currentRelease.Contributions += releaseDiff.total_commits;
+                        TallyCommits(currentRelease, repoCurrentRelease.Repository, releaseDiff);
                     }
                     catch (Exception ex)
                     {
@@ -76,12 +118,26 @@ namespace dotnetthanks_loader
             }
 
             System.IO.File.WriteAllText($"./{repo}.json", JsonSerializer.Serialize(sortedReleases));
-
         }
 
-        private static void TallyCommits(dotnetthanks.Release core, dotnetthanks.Release release, Root root)
+        /// <summary>
+        /// Find the previous release for the current release in the sorted collection of all releases.
+        /// Take the immediate previous release it it has the same major.minor version (e.g. 5.0.0-RC1 for 5.0.0-RC2),
+        /// or take the previous GA release (e.g. 3.0.0 for 5.0.0-preview2 not 3.1.10).
+        /// </summary>
+        /// <param name="index">The index of the <paramref name="currentRelease"/> in the <paramref name="sortedReleases"/> list.</param>
+        /// <returns>The previous release, if found; otherwise <see cref="null"/>, if the current release if the first release.</returns>
+        private static dotnetthanks.Release GetPreviousRelease(List<dotnetthanks.Release> sortedReleases, dotnetthanks.Release currentRelease, int index)
         {
+            if (currentRelease.Version.Major == sortedReleases[index].Version.Major &&
+                currentRelease.Version.Minor == sortedReleases[index].Version.Minor)
+                return sortedReleases[index];
 
+            return sortedReleases.Skip(index).FirstOrDefault(r => currentRelease.Version > r.Version && r.IsGA);
+        }
+
+        private static void TallyCommits(dotnetthanks.Release core, string repoName, Root root)
+        {
             // these the commits within the release
             foreach (var item in root.commits)
             {
@@ -89,12 +145,12 @@ namespace dotnetthanks_loader
                 if (item.author != null)
                 {
                     var author = item.author;
-                    author.name = item.commit.author.name;    
+                    author.name = item.commit.author.name;
 
                     if (String.IsNullOrEmpty(author.name))
                         author.name = "Unknown";
 
-                    if (!exclusions.Contains(author.name))
+                    if (!exclusions.Contains(author.name.ToLower()))
                     {
                         // find if the author has been counted
                         var person = core.Contributors.Find(p => p.Name == author.name);
@@ -106,7 +162,7 @@ namespace dotnetthanks_loader
                                 Link = author.html_url,
                                 Count = 1
                             };
-                            person.Repos.Add(new RepoItem() { Name = release.Name, Count = 1 });
+                            person.Repos.Add(new RepoItem() { Name = repoName, Count = 1 });
 
                             core.Contributors.Add(person);
                         }
@@ -115,67 +171,45 @@ namespace dotnetthanks_loader
                             // found the author, does the repo exist as well?
                             person.Count += 1;
 
-                            var repoItem = person.Repos.Find(r => r.Name == release.Name);
+                            var repoItem = person.Repos.Find(r => r.Name == repoName);
                             if (repoItem == null)
                             {
-                                person.Repos.Add(new RepoItem() { Name = release.Name, Count = 1 });
+                                person.Repos.Add(new RepoItem() { Name = repoName, Count = 1 });
                             }
                             else
                             {
                                 repoItem.Count += 1;
                             }
                         }
+                    } 
+                    else
+                    {
+                         Console.WriteLine(author.name.ToLower());
                     }
                 }
             }
         }
 
-        private static async Task<List<dotnetthanks.Release>> LoadReleases(string repo)
+        private static async Task<IEnumerable<dotnetthanks.Release>> LoadReleasesAsync(string repo)
         {
-
-            var list = new List<dotnetthanks.Release>();
-
             var results = await _ghclient.Repository.Release.GetAll("dotnet", repo);
-            foreach (var release in results)
+
+            return results.Select(release => new dotnetthanks.Release
             {
-                list.Add(new dotnetthanks.Release()
-                {
-                    Name = release.Name,
-                    Tag = release.TagName,
-                    Id = release.Id,
-                    TargetCommit = release.TargetCommitish,
-                    ChildRepos = ParseReleaseBody(release.Body)
-
-                });
-            }
-
-            return list;
-
-        }
-
-        private static async Task<dotnetthanks.Release> LoadRelease(string owner, string repo, string tag)
-        {
-
-            var result = await _ghclient.Repository.Release.Get(owner, repo, tag);
-
-            return new dotnetthanks.Release()
-            {
-                Name = result.Name,
-                Tag = result.TagName,
-                Id = result.Id,
-                TargetCommit = result.TargetCommitish,
-                ChildRepos = ParseReleaseBody(result.Body)
-
-            };
+                Name = release.Name,
+                Tag = release.TagName,
+                Id = release.Id,
+                // This field points to the default branch, which is useless
+                // TargetCommit = release.TargetCommitish,
+                ChildRepos = ParseReleaseBody(release.Body)
+            });
         }
 
         private static List<ChildRepo> ParseReleaseBody(string body)
         {
-
             var results = new List<ChildRepo>();
 
             var items = body.Split("\r\n");
-
             Array.ForEach(items, r =>
             {
                 if (r.StartsWith("*"))
@@ -188,10 +222,11 @@ namespace dotnetthanks_loader
             return results;
         }
 
-        private static async Task<Root> LoadCommitsForReleases(string fromRelease, string toRelease, string owner, string repo)
+        private static async Task<Root> LoadCommitsForReleasesAsync(string fromRelease, string toRelease, string owner, string repo)
         {
             _client = new HttpClient();
-            _client.DefaultRequestHeaders.Add("authorization", $"Basic c3Bib3llcjphMmVjODg3NGQxNGZlZDYyYTFjMjY0YzczZjQ5N2I2Y2ZiM2Q4OGZh");
+
+            _client.DefaultRequestHeaders.Add("authorization", $"Basic {_token}");
             _client.DefaultRequestHeaders.Add("cache-control", "no-cache");
             _client.DefaultRequestHeaders.Add("User-Agent", "dotnet-thanks");
 
@@ -199,9 +234,9 @@ namespace dotnetthanks_loader
             {
                 string url = $"https://api.github.com/repos/{owner}/{repo}/compare/{fromRelease}...{toRelease}";
                 var commits = await _client.GetStringAsync(url);
-               
+
                 var releaseCommits = JsonSerializer.Deserialize<Root>(commits);
-              
+
                 return releaseCommits;
             }
             catch (System.Exception ex)
@@ -211,11 +246,8 @@ namespace dotnetthanks_loader
             }
 
 
-            
-
             return null;
 
         }
-
     }
 }
