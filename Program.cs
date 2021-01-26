@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Net.Http;
+using System.Net.WebSockets;
 using System.Text.Json;
 using System.Threading.Tasks;
 using dotnetthanks;
@@ -36,9 +37,10 @@ namespace dotnetthanks_loader
             _ghclient.Credentials = basic;
 
             var repo = "core";
-
+            var owner = "dotnet"; 
+            
             // load all releases for dotnet/core
-            IEnumerable<dotnetthanks.Release> allReleases = await LoadReleasesAsync(repo);
+            IEnumerable<dotnetthanks.Release> allReleases = await LoadReleasesAsync(owner, repo);
 
             // Sort releases from the yongest to the oldest by version
             // E.g.
@@ -190,9 +192,9 @@ namespace dotnetthanks_loader
             }
         }
 
-        private static async Task<IEnumerable<dotnetthanks.Release>> LoadReleasesAsync(string repo)
+        private static async Task<IEnumerable<dotnetthanks.Release>> LoadReleasesAsync(string owner, string repo)
         {
-            var results = await _ghclient.Repository.Release.GetAll("dotnet", repo);
+            var results = await _ghclient.Repository.Release.GetAll(owner, repo);
 
             return results.Select(release => new dotnetthanks.Release
             {
@@ -208,6 +210,9 @@ namespace dotnetthanks_loader
         private static List<ChildRepo> ParseReleaseBody(string body)
         {
             var results = new List<ChildRepo>();
+
+            if (results is null || results.Count == 0)
+                return results;
 
             var items = body.Split("\r\n");
             Array.ForEach(items, r =>
