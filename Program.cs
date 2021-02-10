@@ -1,14 +1,14 @@
-﻿using System;
+﻿using dotnetthanks;
+using Microsoft.Extensions.Configuration;
+using Octokit;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Net.Http;
-using System.Net.WebSockets;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
-using dotnetthanks;
-using Microsoft.Extensions.Configuration;
-using Octokit;
 
 namespace dotnetthanks_loader
 {
@@ -32,7 +32,6 @@ namespace dotnetthanks_loader
             _token = config.GetSection("GITHUB_TOKEN").Value;
 
             _ghclient = new GitHubClient(new ProductHeaderValue("dotnet-thanks"));
-            //var basic = new Credentials(_token);
             var basic = new Credentials(config.GetSection("GITHUB_CLIENTID").Value,config.GetSection("GITHUB_CLIENTSECRET").Value);
             _ghclient.Credentials = basic;
 
@@ -98,18 +97,22 @@ namespace dotnetthanks_loader
                     try
                     {
                         Console.WriteLine($"\tProcessing: {repoCurrentRelease.Name}: {repoPrevRelease.Tag}..{repoCurrentRelease.Tag}");
-                        var releaseDiff = await LoadCommitsForReleasesAsync(repoPrevRelease.Tag,
-                                                                            repoCurrentRelease.Tag,
-                                                                            repoCurrentRelease.Owner,
-                                                                            repoCurrentRelease.Repository);
-                        if (releaseDiff is null || releaseDiff.total_commits < 1)
-                        {
-                            Debugger.Break();
-                            continue;
-                        }
 
-                        currentRelease.Contributions += releaseDiff.total_commits;
-                        TallyCommits(currentRelease, repoCurrentRelease.Repository, releaseDiff);
+                        if (repoPrevRelease.Tag != repoCurrentRelease.Tag)
+                        {
+                            var releaseDiff = await LoadCommitsForReleasesAsync(repoPrevRelease.Tag,
+                                                                                repoCurrentRelease.Tag,
+                                                                                repoCurrentRelease.Owner,
+                                                                                repoCurrentRelease.Repository);
+                            if (releaseDiff is null || releaseDiff.total_commits < 1)
+                            {
+                                //Debugger.Break();
+                                continue;
+                            }
+
+                            currentRelease.Contributions += releaseDiff.total_commits;
+                            TallyCommits(currentRelease, repoCurrentRelease.Repository, releaseDiff);
+                        }
                     }
                     catch (Exception ex)
                     {
@@ -184,10 +187,6 @@ namespace dotnetthanks_loader
                             }
                         }
                     } 
-                    else
-                    {
-                         Console.WriteLine(author.name.ToLower());
-                    }
                 }
             }
         }
@@ -201,8 +200,6 @@ namespace dotnetthanks_loader
                 Name = release.Name,
                 Tag = release.TagName,
                 Id = release.Id,
-                // This field points to the default branch, which is useless
-                // TargetCommit = release.TargetCommitish,
                 ChildRepos = ParseReleaseBody(release.Body)
             });
         }
@@ -211,29 +208,35 @@ namespace dotnetthanks_loader
         {
             var results = new List<ChildRepo>();
 
-            if (results is null || results.Count == 0)
-                return results;
+            var pattern = "\\[(.+)\\]\\(([^ ]+?)( \"(.+)\")?\\)";
+            var rg = new Regex(pattern, RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.Multiline);
+            var match = rg.Match(body);
 
-            var items = body.Split("\r\n");
-            Array.ForEach(items, r =>
+            while (match.Success)
             {
-                if (r.StartsWith("*"))
+                var name = match.Groups[1]?.Value.Trim();
+                var url = match.Groups[2]?.Value.Trim();
+                if (url.Contains("/tag/"))
                 {
-                    var parts = r.Split("*[]())".ToCharArray());
-                    results.Add(new ChildRepo() { Name = parts[2], Url = parts[4] });
+                    results.Add(new ChildRepo() { Name = name, Url = url });
                 }
-            });
+
+                match = match.NextMatch();
+            }
 
             return results;
         }
 
         private static async Task<Root> LoadCommitsForReleasesAsync(string fromRelease, string toRelease, string owner, string repo)
         {
-            _client = new HttpClient();
-
-            _client.DefaultRequestHeaders.Add("authorization", $"Basic {_token}");
-            _client.DefaultRequestHeaders.Add("cache-control", "no-cache");
-            _client.DefaultRequestHeaders.Add("User-Agent", "dotnet-thanks");
+            _client = new HttpClient
+            {
+                DefaultRequestHeaders =
+                {
+                    { "Authorization", $"bearer {_token}" },
+                    { "User-Agent", "dotnet-thanks" }
+                }
+            };
 
             try
             {

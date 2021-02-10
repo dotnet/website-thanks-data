@@ -17,8 +17,10 @@ Each child repo, other repositories in the release, are processed in the same ma
 ## Local Development
 
 1. Create a GitHub ClientID and Secret in your settings under the [OAuth Apps section](https://github.com/settings/developers).
+1. Create a [GitHub Personal Access Token](https://github.com/settings/tokens)
 1. Fork the dotnetthanks-loader repo and cd into it.
 1. Create [user-secrets](https://docs.microsoft.com/aspnet/core/security/app-secrets?WT.mc_id=dotnet-00000-shboyer) using the following commands
     1. `dotnet user-secrets init`
     1. `dotnet user-secrets set GITHUB_CLIENTID <your-value>`
     1. `dotnet user-secrets set GITHUB_CLIENTSECRET <your-value>`
+    1. `dotnet user-secrets set GITHUB_TOKEN <your Personal Access Token>`

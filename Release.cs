@@ -87,10 +87,10 @@ namespace dotnetthanks
 
         public string Owner
         {
-            get => this.Url?.Split("/")[3];
+            get => "dotnet"; // this.Url?.Split("/")[3];
 
         }
 
-        public string Tag { get => Url?.Substring(Url.LastIndexOf($"/") + 1); }
+        public string Tag { get => Url?.Substring(Url.LastIndexOf($"/") + 1).Trim(); }
     }
 }
