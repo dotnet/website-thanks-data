@@ -104,13 +104,13 @@ namespace dotnetthanks_loader
                                                                                 repoCurrentRelease.Tag,
                                                                                 repoCurrentRelease.Owner,
                                                                                 repoCurrentRelease.Repository);
-                            if (releaseDiff is null || releaseDiff.total_commits < 1)
+                            if (releaseDiff is null || releaseDiff.Count < 1)
                             {
                                 //Debugger.Break();
                                 continue;
                             }
 
-                            currentRelease.Contributions += releaseDiff.total_commits;
+                            currentRelease.Contributions += releaseDiff.Count;
                             TallyCommits(currentRelease, repoCurrentRelease.Repository, releaseDiff);
                         }
                     }
@@ -141,10 +141,10 @@ namespace dotnetthanks_loader
             return sortedReleases.Skip(index).FirstOrDefault(r => currentRelease.Version > r.Version && r.IsGA);
         }
 
-        private static void TallyCommits(dotnetthanks.Release core, string repoName, Root root)
+        private static void TallyCommits(dotnetthanks.Release core, string repoName, List<MergeBaseCommit> commits)
         {
             // these the commits within the release
-            foreach (var item in root.commits)
+            foreach (var item in commits)
             {
 
                 if (item.author != null)
@@ -227,7 +227,7 @@ namespace dotnetthanks_loader
             return results;
         }
 
-        private static async Task<Root> LoadCommitsForReleasesAsync(string fromRelease, string toRelease, string owner, string repo)
+        private static async Task<List<MergeBaseCommit>> LoadCommitsForReleasesAsync(string fromRelease, string toRelease, string owner, string repo)
         {
             _client = new HttpClient
             {
@@ -241,9 +241,22 @@ namespace dotnetthanks_loader
             try
             {
                 string url = $"https://api.github.com/repos/{owner}/{repo}/compare/{fromRelease}...{toRelease}";
-                var commits = await _client.GetStringAsync(url);
+                var compare = await _client.GetStringAsync(url);
 
-                var releaseCommits = JsonSerializer.Deserialize<Root>(commits);
+                var compareDetails = JsonSerializer.Deserialize<Root>(compare);
+
+                var remainingCommits = compareDetails.ahead_by;
+                var page = 0;
+                var releaseCommits = new List<MergeBaseCommit>(remainingCommits);
+                while (remainingCommits > 0)
+                {
+                    url = $"https://api.github.com/repos/{owner}/{repo}/commits?sha={toRelease}&page={page}";
+                    var commits = await _client.GetStringAsync(url);
+                    var pageDetails = JsonSerializer.Deserialize<List<MergeBaseCommit>>(commits);
+                    releaseCommits.AddRange(remainingCommits >= pageDetails.Count ? pageDetails : pageDetails.Take(remainingCommits));
+                    remainingCommits -= pageDetails.Count;
+                    page++;
+                }
 
                 return releaseCommits;
             }
