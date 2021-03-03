@@ -133,7 +133,7 @@ namespace dotnetthanks_loader
                 var root = $"/app/{Environment.GetEnvironmentVariable("dir")}";
                 var branch = $"thanks-data{Guid.NewGuid().ToString()}";
                 var output = new StringBuilder();
-               
+
                 if (Debugger.IsAttached)
                 {
                     root = Environment.GetEnvironmentVariable("dir");
@@ -170,11 +170,24 @@ namespace dotnetthanks_loader
 
         private static async Task<PullRequest> CreatePullRequestFromFork(string forkname, string branch)
         {
+            var basic = new Credentials(_token);
+            var client = new GitHubClient(new ProductHeaderValue("dotnet-thanks"));
+            client.Credentials = basic;
+
             NewPullRequest newPr = new NewPullRequest("Update thanks data file", $"spboyer:{branch}", "master");
 
-            var pullRequest = await _ghclient.PullRequest.Create("dotnet", "website-resources", newPr);
+            try
+            {
+                var pullRequest = await client.PullRequest.Create("dotnet", "website-resources", newPr);
 
-            return pullRequest;
+                return pullRequest;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+            }
+
+            return null;
         }
 
         /// <summary>
