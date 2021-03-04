@@ -4,8 +4,10 @@ using Octokit;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Net.Http;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -17,7 +19,7 @@ namespace dotnetthanks_loader
         private static HttpClient _client;
         private static readonly string[] exclusions = new string[] { "dependabot[bot]", "github-actions[bot]", "msftbot[bot]", "github-actions[bot]", "dotnet-bot", "dotnet bot", "nuget team bot" };
         private static string _token;
-
+        private static bool InDocker { get { return Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER") == "true"; } }
 
         private static GitHubClient _ghclient;
 
@@ -32,12 +34,12 @@ namespace dotnetthanks_loader
             _token = config.GetSection("GITHUB_TOKEN").Value;
 
             _ghclient = new GitHubClient(new ProductHeaderValue("dotnet-thanks"));
-            var basic = new Credentials(config.GetSection("GITHUB_CLIENTID").Value,config.GetSection("GITHUB_CLIENTSECRET").Value);
+            var basic = new Credentials(config.GetSection("GITHUB_CLIENTID").Value, config.GetSection("GITHUB_CLIENTSECRET").Value);
             _ghclient.Credentials = basic;
 
             var repo = "core";
-            var owner = "dotnet"; 
-            
+            var owner = "dotnet";
+
             // load all releases for dotnet/core
             IEnumerable<dotnetthanks.Release> allReleases = await LoadReleasesAsync(owner, repo);
 
@@ -120,9 +122,72 @@ namespace dotnetthanks_loader
                     }
                 }
 
+                if (Environment.GetEnvironmentVariable("TEST") == "1")
+                    break;
+
             }
 
-            System.IO.File.WriteAllText($"./{repo}.json", JsonSerializer.Serialize(sortedReleases));
+            if (InDocker)
+            {
+                var myRepo = Environment.GetEnvironmentVariable("source");
+                var root = $"/app/{Environment.GetEnvironmentVariable("dir")}";
+                var branch = $"thanks-data{Guid.NewGuid().ToString()}";
+                var output = new StringBuilder();
+
+                if (Debugger.IsAttached)
+                {
+                    root = Environment.GetEnvironmentVariable("dir");
+                }
+
+                if (!Directory.Exists(root))
+                {
+                    Directory.CreateDirectory(root);
+                }
+
+                System.IO.File.WriteAllText($"/{root}/{repo}.json", JsonSerializer.Serialize(sortedReleases));
+
+                // clone the repo
+                output.AppendLine(Bash($"git -C {myRepo} pull"));
+                // create branch 
+                output.AppendLine(Bash($"git checkout -b {branch}"));
+
+                output.AppendLine(Bash($"git add /{root}/{repo}.json"));
+                output.AppendLine(Bash($"git commit -m '{repo}.json added'"));
+                output.AppendLine(Bash($"git push --set-upstream origin {branch}"));
+
+                Console.WriteLine(output.ToString());
+
+                var pr = await CreatePullRequestFromFork("spboyer/website-resources", branch);
+
+                Console.WriteLine(pr.HtmlUrl);
+
+            }
+            else
+            {
+                System.IO.File.WriteAllText($"./{repo}.json", JsonSerializer.Serialize(sortedReleases));
+            }
+        }
+
+        private static async Task<PullRequest> CreatePullRequestFromFork(string forkname, string branch)
+        {
+            var basic = new Credentials(_token);
+            var client = new GitHubClient(new ProductHeaderValue("dotnet-thanks"));
+            client.Credentials = basic;
+
+            NewPullRequest newPr = new NewPullRequest("Update thanks data file", $"spboyer:{branch}", "master");
+
+            try
+            {
+                var pullRequest = await client.PullRequest.Create("dotnet", "website-resources", newPr);
+
+                return pullRequest;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+            }
+
+            return null;
         }
 
         /// <summary>
@@ -186,7 +251,7 @@ namespace dotnetthanks_loader
                                 repoItem.Count += 1;
                             }
                         }
-                    } 
+                    }
                 }
             }
         }
@@ -270,5 +335,28 @@ namespace dotnetthanks_loader
             return null;
 
         }
+
+        private static string Bash(string cmd)
+        {
+            var escapedArgs = cmd.Replace("\"", "\\\"");
+
+            var process = new Process()
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = "/bin/bash",
+                    Arguments = $"-c \"{escapedArgs}\"",
+                    RedirectStandardOutput = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                }
+            };
+            process.Start();
+            string result = process.StandardOutput.ReadToEnd();
+            process.WaitForExit();
+            return result;
+        }
+
     }
+
 }
