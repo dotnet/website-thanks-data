@@ -294,14 +294,9 @@ namespace dotnetthanks_loader
 
         private static async Task<List<MergeBaseCommit>> LoadCommitsForReleasesAsync(string fromRelease, string toRelease, string owner, string repo)
         {
-            _client = new HttpClient
-            {
-                DefaultRequestHeaders =
-                {
-                    { "Authorization", $"bearer {_token}" },
-                    { "User-Agent", "dotnet-thanks" }
-                }
-            };
+            _client = new HttpClient();
+            _client.DefaultRequestHeaders.UserAgent.Add(new System.Net.Http.Headers.ProductInfoHeaderValue("dotnet-thanks", "1.0"));
+            _client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Token", _token);
 
             try
             {
