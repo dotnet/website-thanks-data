@@ -7,6 +7,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
+using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -63,15 +64,102 @@ namespace dotnetthanks_loader
                 .OrderByDescending(o => o.Version).ThenByDescending(o => o.Id)
                 .ToList();
 
-            Console.WriteLine($"{repo} - {sortedReleases.Count}");
+            // If arg 1 is "diff" calculate the diff and append it to current core.js file
+            if (args != null && args.Length > 0 && args[0] == "diff")
+            {
+                // load current core.json file
+                IEnumerable<dotnetthanks.Release> corejson = await LoadCurrentCoreJsonAsync();
+                var diff = sortedReleases.Except(corejson);
 
+                if (diff.Count() > 0)
+                {
+                    // For each new release, find its prior release and add it into a new list for commit comparison
+                    var sortedNewReleases = new List<dotnetthanks.Release>();
+                    var newReleases = diff
+                        .OrderByDescending(o => o.Version)
+                        .ThenByDescending(o => o.Id)
+                        .ToList();
+
+                    newReleases.ForEach(r => {
+                        if (sortedReleases.IndexOf(r) > -1)
+                        {
+                            sortedNewReleases.Append(r);
+                            sortedNewReleases.Append(sortedReleases[sortedReleases.IndexOf(r) + 1]);
+                        }
+                    });
+                    
+                    // Process new list and trim the releases used for comparison
+                    await ProcessReleases(sortedNewReleases, repo);
+                    sortedNewReleases = (List<dotnetthanks.Release>)sortedNewReleases.Except(newReleases);
+                    sortedReleases = sortedReleases
+                        .Concat(sortedNewReleases)
+                        .OrderByDescending(o => o.Version)
+                        .ThenByDescending(o => o.Id)
+                        .ToList();
+
+                    System.IO.File.WriteAllText($"./{repo}.json", JsonSerializer.Serialize(sortedReleases));
+                }
+                else
+                {
+                    Console.WriteLine("The current releases list is up to date with core.js\nExiting...");
+                }
+            }
+            else
+            {
+                Console.WriteLine($"Processing all releases...\n{repo} - {sortedReleases.Count}");
+
+                await ProcessReleases(sortedReleases, repo);
+
+                if (InDocker)
+                {
+                    var myRepo = Environment.GetEnvironmentVariable("source");
+                    var root = $"/app/{Environment.GetEnvironmentVariable("dir")}";
+                    var branch = $"thanks-data{Guid.NewGuid().ToString()}";
+                    var output = new StringBuilder();
+
+                    if (Debugger.IsAttached)
+                    {
+                        root = Environment.GetEnvironmentVariable("dir");
+                    }
+
+                    if (!Directory.Exists(root))
+                    {
+                        Directory.CreateDirectory(root);
+                    }
+
+                    System.IO.File.WriteAllText($"/{root}/{repo}.json", JsonSerializer.Serialize(sortedReleases));
+
+                    // clone the repo
+                    output.AppendLine(Bash($"git -C {myRepo} pull"));
+                    // create branch 
+                    output.AppendLine(Bash($"git checkout -b {branch}"));
+
+                    output.AppendLine(Bash($"git add /{root}/{repo}.json"));
+                    output.AppendLine(Bash($"git commit -m '{repo}.json added'"));
+                    output.AppendLine(Bash($"git push --set-upstream origin {branch}"));
+
+                    Console.WriteLine(output.ToString());
+
+                    var pr = await CreatePullRequestFromFork("spboyer/website-resources", branch);
+
+                    Console.WriteLine(pr.HtmlUrl);
+                }
+                else
+                {
+                    System.IO.File.WriteAllText($"./{repo}.json", JsonSerializer.Serialize(sortedReleases));
+                }
+            }
+        }
+
+        private static async Task ProcessReleases(List<dotnetthanks.Release> releases, string repo)
+        {
             // dotnet/core
             dotnetthanks.Release currentRelease;
             dotnetthanks.Release previousRelease;
-            for (int i = 0; i < sortedReleases.Count - 1; i++)
+            for (int i = 0; i < releases.Count - 1; i++)
             {
-                currentRelease = sortedReleases[i];
-                previousRelease = GetPreviousRelease(sortedReleases, currentRelease, i + 1);
+                currentRelease = releases[i];
+                previousRelease = GetPreviousRelease(releases, currentRelease, i + 1);
                 if (previousRelease is null)
                 {
                     // Is this the first release?
@@ -124,47 +212,6 @@ namespace dotnetthanks_loader
 
                 if (Environment.GetEnvironmentVariable("TEST") == "1")
                     break;
-
-            }
-
-            if (InDocker)
-            {
-                var myRepo = Environment.GetEnvironmentVariable("source");
-                var root = $"/app/{Environment.GetEnvironmentVariable("dir")}";
-                var branch = $"thanks-data{Guid.NewGuid().ToString()}";
-                var output = new StringBuilder();
-
-                if (Debugger.IsAttached)
-                {
-                    root = Environment.GetEnvironmentVariable("dir");
-                }
-
-                if (!Directory.Exists(root))
-                {
-                    Directory.CreateDirectory(root);
-                }
-
-                System.IO.File.WriteAllText($"/{root}/{repo}.json", JsonSerializer.Serialize(sortedReleases));
-
-                // clone the repo
-                output.AppendLine(Bash($"git -C {myRepo} pull"));
-                // create branch 
-                output.AppendLine(Bash($"git checkout -b {branch}"));
-
-                output.AppendLine(Bash($"git add /{root}/{repo}.json"));
-                output.AppendLine(Bash($"git commit -m '{repo}.json added'"));
-                output.AppendLine(Bash($"git push --set-upstream origin {branch}"));
-
-                Console.WriteLine(output.ToString());
-
-                var pr = await CreatePullRequestFromFork("spboyer/website-resources", branch);
-
-                Console.WriteLine(pr.HtmlUrl);
-
-            }
-            else
-            {
-                System.IO.File.WriteAllText($"./{repo}.json", JsonSerializer.Serialize(sortedReleases));
             }
         }
 
@@ -326,9 +373,25 @@ namespace dotnetthanks_loader
                 Console.WriteLine(ex.Message);
             }
 
+            return null;
+        }
+
+        private static async Task<List<dotnetthanks.Release>> LoadCurrentCoreJsonAsync()
+        {
+            _client = new HttpClient();
+            var url = "https://dotnetwebsitestorage.blob.core.windows.net/blob-assets/json/thanks/core.json";
+
+            try
+            {
+                var response = await _client.GetFromJsonAsync<List<dotnetthanks.Release>>(url);
+                return response;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+            }
 
             return null;
-
         }
 
         private static string Bash(string cmd)
