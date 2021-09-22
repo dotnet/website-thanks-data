@@ -73,6 +73,8 @@ namespace dotnetthanks_loader
 
                 if (diff.Count() > 0)
                 {
+                    Console.WriteLine($"Processing diffs in releases...\n{repo} - {diff.Count()}");
+
                     // For each new release, find its prior release and add it into a new list for commit comparison
                     var sortedNewReleases = new List<dotnetthanks.Release>();
                     var newReleases = diff
