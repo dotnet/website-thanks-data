@@ -60,7 +60,7 @@ namespace dotnetthanks_loader
             //      3.1.0       // GA
             //      ...
             //
-            var sortedReleases = allReleases
+            List<dotnetthanks.Release> sortedReleases = allReleases
                 .OrderByDescending(o => o.Version).ThenByDescending(o => o.Id)
                 .ToList();
 
@@ -83,21 +83,16 @@ namespace dotnetthanks_loader
                     newReleases.ForEach(r => {
                         if (sortedReleases.IndexOf(r) > -1)
                         {
-                            sortedNewReleases.Append(r);
-                            sortedNewReleases.Append(sortedReleases[sortedReleases.IndexOf(r) + 1]);
+                            sortedNewReleases.Add(r);
+                            sortedNewReleases.Add(sortedReleases[sortedReleases.IndexOf(r) + 1]);
                         }
                     });
                     
                     // Process new list and trim the releases used for comparison
                     await ProcessReleases(sortedNewReleases, repo);
-                    sortedNewReleases = (List<dotnetthanks.Release>)sortedNewReleases.Except(newReleases);
-                    sortedReleases = sortedReleases
-                        .Concat(sortedNewReleases)
-                        .OrderByDescending(o => o.Version)
-                        .ThenByDescending(o => o.Id)
-                        .ToList();
+                    corejson = corejson.ToList().Concat(newReleases).OrderByDescending(o => o.Version).ThenByDescending(o => o.Id).ToList();
 
-                    System.IO.File.WriteAllText($"./{repo}.json", JsonSerializer.Serialize(sortedReleases));
+                    System.IO.File.WriteAllText($"./{repo}.json", JsonSerializer.Serialize(corejson));
                 }
                 else
                 {
@@ -258,7 +253,6 @@ namespace dotnetthanks_loader
             // these the commits within the release
             foreach (var item in commits)
             {
-
                 if (item.author != null)
                 {
                     var author = item.author;
@@ -312,7 +306,8 @@ namespace dotnetthanks_loader
                 Name = release.Name,
                 Tag = release.TagName,
                 Id = release.Id,
-                ChildRepos = ParseReleaseBody(release.Body)
+                ChildRepos = ParseReleaseBody(release.Body),
+                Contributors = new List<dotnetthanks.Contributor>()
             });
         }
 

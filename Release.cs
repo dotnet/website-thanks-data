@@ -19,13 +19,13 @@ namespace dotnetthanks
             "v3.0.0",
             "v3.1.0",
             "v5.0.0",
-            "v6.0.0",
-
+            "v6.0.0"
         };
         private string _tag;
 
         public List<ChildRepo> ChildRepos { get; set; } //= new List<ChildRepo>();
-        public List<Contributor> Contributors { get; private set; } = new List<Contributor>();
+        private List<Contributor> _Contributors;
+        public List<Contributor> Contributors { get; set; }
         public int Contributions { get; set; }
         public int Id { get; set; }
         public bool IsGA
