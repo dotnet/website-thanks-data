@@ -1,0 +1,46 @@
+variables:
+  System.Debug: true
+  BuildParameters.RestoreBuildProjects: '**/*.csproj'
+  BuildConfiguration: release
+  BuildPlatform: anycpu
+trigger:
+  branches:
+    include:
+    - '*'
+  batch: True
+name: $(date:yyyyMMdd)$(rev:.r)
+resources:
+  repositories:
+  - repository: self
+    type: git
+    ref: main
+jobs:
+- job: Phase_1
+  displayName: Agent job 1
+  timeoutInMinutes: 0
+  pool:
+    name: Hosted Windows 2019 with VS2019
+  steps:
+  - checkout: self
+  - task: UseDotNet@2
+    displayName: Use .NET Core 5 SDK
+    inputs:
+      version: 5.x
+      includePreviewVersions: true
+  - task: DotNetCoreCLI@2
+    displayName: Build
+    inputs:
+      projects: $(BuildParameters.RestoreBuildProjects)
+      arguments: --configuration $(BuildConfiguration)
+  - task: DotNetCoreCLI@2
+    displayName: Publish
+    inputs:
+      command: publish
+      publishWebProjects: True
+      arguments: -r win-x64 --self-contained true --configuration $(BuildConfiguration) --output $(build.artifactstagingdirectory)
+  - task: PublishBuildArtifacts@1
+    displayName: Publish Artifact
+    inputs:
+      PathtoPublish: $(build.artifactstagingdirectory)
+      ArtifactName: dotnetwebsite-main-drop
+      TargetPath: '\\my\share\$(Build.DefinitionName)\$(Build.BuildNumber)'
