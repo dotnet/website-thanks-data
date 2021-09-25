@@ -19,7 +19,7 @@ jobs:
   displayName: Agent job 1
   timeoutInMinutes: 0
   pool:
-    name: Hosted Windows 2019 with VS2019
+    vmImage: 'windows-latest'
   steps:
   - checkout: self
   - task: UseDotNet@2
@@ -36,7 +36,11 @@ jobs:
     displayName: 'Publish'
     inputs:
       command: publish
-      publishWebProjects: True
+      publishWebProjects: false
       arguments: '--configuration $(BuildConfiguration) --output $(Build.ArtifactStagingDirectory)'
+      zipAfterPublish: True
   - task: PublishBuildArtifacts@1
     displayName: 'Publish Artifacts'
+    inputs:
+      targetPath: '$(Build.ArtifactStagingDirectory)' 
+      artifactName: 'website-thanks-data'
