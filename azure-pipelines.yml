@@ -33,14 +33,10 @@ jobs:
       projects: $(BuildParameters.RestoreBuildProjects)
       arguments: --configuration $(BuildConfiguration)
   - task: DotNetCoreCLI@2
-    displayName: Publish
+    displayName: 'Publish'
     inputs:
       command: publish
       publishWebProjects: True
-      arguments: -r win-x64 --self-contained true --configuration $(BuildConfiguration) --output $(build.artifactstagingdirectory)
+      arguments: '--configuration $(BuildConfiguration) --output $(Build.ArtifactStagingDirectory)'
   - task: PublishBuildArtifacts@1
-    displayName: Publish Artifact
-    inputs:
-      PathtoPublish: $(build.artifactstagingdirectory)
-      ArtifactName: website-thanks-data-main-drop
-      TargetPath: '\\my\share\$(Build.DefinitionName)\$(Build.BuildNumber)'
+    displayName: 'Publish Artifacts'
