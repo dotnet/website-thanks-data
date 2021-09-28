@@ -1,0 +1,45 @@
+variables:
+  BuildParameters.RestoreBuildProjects: '**/*.csproj'
+  BuildConfiguration: release
+  BuildPlatform: anycpu
+trigger:
+  branches:
+    include:
+    - '*'
+  batch: True
+name: $(date:yyyyMMdd)$(rev:.r)
+resources:
+  repositories:
+  - repository: self
+    type: git
+    ref: main
+jobs:
+- job: Phase_1
+  displayName: Agent job 1
+  timeoutInMinutes: 0
+  pool:
+    vmImage: 'windows-latest'
+  steps:
+  - checkout: self
+  - task: UseDotNet@2
+    displayName: Use .NET Core 5 SDK
+    inputs:
+      version: 5.x
+      includePreviewVersions: true
+  - task: DotNetCoreCLI@2
+    displayName: Build
+    inputs:
+      projects: $(BuildParameters.RestoreBuildProjects)
+      arguments: --configuration $(BuildConfiguration)
+  - task: DotNetCoreCLI@2
+    displayName: 'Publish'
+    inputs:
+      command: publish
+      publishWebProjects: false
+      arguments: '--configuration $(BuildConfiguration) --output $(Build.ArtifactStagingDirectory)'
+      zipAfterPublish: True
+  - task: PublishBuildArtifacts@1
+    displayName: 'Publish Artifacts'
+    inputs:
+      targetPath: '$(Build.ArtifactStagingDirectory)' 
+      artifactName: 'website-thanks-data'
