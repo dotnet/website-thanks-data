@@ -301,7 +301,7 @@ namespace dotnetthanks_loader
             try
             {
                 string url = $"https://api.github.com/repos/{owner}/{repo}/compare/{fromRelease}...{toRelease}";
-                var compare = await _client.GetStringAsync(url);
+                var compare = await ExecuteWithRateLimitHandling(() => _client.GetStringAsync(url));
 
                 var compareDetails = JsonSerializer.Deserialize<Root>(compare);
 
@@ -311,7 +311,7 @@ namespace dotnetthanks_loader
                 while (remainingCommits > 0)
                 {
                     url = $"https://api.github.com/repos/{owner}/{repo}/commits?sha={toRelease}&page={page}";
-                    var commits = await _client.GetStringAsync(url);
+                    var commits = await ExecuteWithRateLimitHandling(() => _client.GetStringAsync(url));
                     var pageDetails = JsonSerializer.Deserialize<List<MergeBaseCommit>>(commits);
                     releaseCommits.AddRange(remainingCommits >= pageDetails.Count ? pageDetails : pageDetails.Take(remainingCommits));
                     remainingCommits -= pageDetails.Count;
@@ -322,13 +322,40 @@ namespace dotnetthanks_loader
             }
             catch (System.Exception ex)
             {
-
                 Console.WriteLine(ex.Message);
             }
 
-
             return null;
-
+        }
+        private static async Task<T> ExecuteWithRateLimitHandling<T>(Func<Task<T>> operation)
+        {
+            var remainingRetries = 3;
+            Retry:
+            try
+            {
+                return await operation();
+            }
+            catch (Exception ex) when (remainingRetries > 0)
+            {
+                if (ex.Message.Contains("403"))
+                {
+                    string url = "https://api.github.com/rate_limit";
+                    var limit = await _client.GetStringAsync(url);
+                    var response = JsonSerializer.Deserialize<RateLimit>(limit);
+                    var delay = new TimeSpan(response.rate.reset)
+                                  .Add(TimeSpan.FromMinutes(10)); // Add some buffer
+                    var until = DateTime.Now.Add(delay);
+                    Console.WriteLine($"Rate limit exceeded. Waiting for {delay.TotalMinutes:N1} mins until {until}.");
+                    await Task.Delay(delay);
+                    remainingRetries--;
+                    goto Retry;
+                }
+                else
+                {
+                    return await Task.FromException<T>(ex);
+                }
+                
+            }
         }
 
         private static string Bash(string cmd)
