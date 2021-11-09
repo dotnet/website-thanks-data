@@ -18,7 +18,7 @@ jobs:
   displayName: Agent job 1
   timeoutInMinutes: 0
   pool:
-    vmImage: windows-2022
+    vmImage: 'windows-latest'
   steps:
   - checkout: self
   - task: UseDotNet@2
