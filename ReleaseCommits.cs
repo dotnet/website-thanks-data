@@ -1,6 +1,4 @@
 // Root myDeserializedClass = JsonConvert.DeserializeObject<Root>(myJsonResponse); 
-using System;
-using System.Collections.Generic;
 
 public class Committer    {
     public string name { get; set; } 
