@@ -24,7 +24,6 @@ namespace dotnetthanks
         private string _tag;
 
         public List<ChildRepo> ChildRepos { get; set; } //= new List<ChildRepo>();
-        private List<Contributor> _Contributors;
         public List<Contributor> Contributors { get; set; }
         public int Contributions { get; set; }
         public int Id { get; set; }
