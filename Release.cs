@@ -6,7 +6,7 @@ using System.Text.RegularExpressions;
 namespace dotnetthanks
 {
     [DebuggerDisplay("Name = {Name}, GA = {IsGA}, Tag = {Tag}, Commit = {TargetCommit}")]
-    public class Release
+    public class Release: IEquatable<Release>
     {
         // The list of GA releases
         private static readonly HashSet<string> GaReleases = new()
@@ -19,13 +19,12 @@ namespace dotnetthanks
             "v3.0.0",
             "v3.1.0",
             "v5.0.0",
-            "v6.0.0",
-
+            "v6.0.0"
         };
         private string _tag;
 
         public List<ChildRepo> ChildRepos { get; set; } //= new List<ChildRepo>();
-        public List<Contributor> Contributors { get; private set; } = new List<Contributor>();
+        public List<Contributor> Contributors { get; set; }
         public int Contributions { get; set; }
         public int Id { get; set; }
         public bool IsGA
@@ -49,6 +48,16 @@ namespace dotnetthanks
 
         public Version Version { get; private set; }
         public string VersionLabel { get; private set; }
+        public bool Equals(Release other)
+        {
+            if (other is null)
+                return false;
+
+            return this.Id == other.Id;
+        }
+
+        public override bool Equals(object obj) => Equals(obj as Release);
+        public override int GetHashCode() => (Id).GetHashCode();
 
         private void ParseVersion()
         {
