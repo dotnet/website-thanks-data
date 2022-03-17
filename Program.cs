@@ -63,7 +63,7 @@ namespace dotnetthanks_loader
             if (args != null && args.Length > 0 && args[0] == "diff")
             {
                 // load current core.json file'
-#if TEST
+#if DEBUG
                 IEnumerable<dotnetthanks.Release> corejson = LoadCurrentCoreJson();
 #else
                 IEnumerable<dotnetthanks.Release> corejson = await LoadCurrentCoreJsonAsync();
@@ -173,7 +173,8 @@ namespace dotnetthanks_loader
             }
         }
 
-        private static async Task ProcessReleases(List<dotnetthanks.Release> releases, string repo, List<dotnetthanks.Release> diff = null)
+#nullable enable
+        private static async Task ProcessReleases(List<dotnetthanks.Release> releases, string repo, List<dotnetthanks.Release>? diff = null)
         {
             // dotnet/core
             dotnetthanks.Release currentRelease;
@@ -184,7 +185,7 @@ namespace dotnetthanks_loader
                 previousRelease = GetPreviousRelease(releases, currentRelease, i + 1);
 
                 // Skip any release comparisons that are not in diff
-                if (diff.Any() && !diff.Contains(currentRelease))
+                if (diff != null && diff.Any() && !diff.Contains(currentRelease))
                 {
                     continue;
                 }
@@ -243,6 +244,7 @@ namespace dotnetthanks_loader
                     break;
             }
         }
+#nullable disable
 
         private static async Task<PullRequest> CreatePullRequestFromFork(string forkname, string branch)
         {
