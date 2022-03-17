@@ -65,8 +65,9 @@ namespace dotnetthanks_loader
                 // load current core.json file'
 #if TEST
                 IEnumerable<dotnetthanks.Release> corejson = LoadCurrentCoreJson();
-#endif
+#else
                 IEnumerable<dotnetthanks.Release> corejson = await LoadCurrentCoreJsonAsync();
+#endif
                 var diff = sortedReleases.Except(corejson);
 
                 if (diff.Any())
@@ -405,7 +406,6 @@ namespace dotnetthanks_loader
             return null;
         }
 
-#if TEST
         private static List<dotnetthanks.Release> LoadCurrentCoreJson()
         {
             try
@@ -422,7 +422,7 @@ namespace dotnetthanks_loader
 
             return null;
         }
-#else
+
         private static async Task<List<dotnetthanks.Release>> LoadCurrentCoreJsonAsync()
         {
             _client = new HttpClient();
@@ -440,7 +440,6 @@ namespace dotnetthanks_loader
 
             return null;
         }
-#endif
 
         private static async Task<T> ExecuteWithRateLimitHandling<T>(Func<Task<T>> operation)
         {
