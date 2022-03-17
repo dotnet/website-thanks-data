@@ -55,40 +55,70 @@ namespace dotnetthanks_loader
             //      ...
             //
             List<dotnetthanks.Release> sortedReleases = allReleases
-                .OrderByDescending(o => o.Version).ThenByDescending(o => o.Id)
+                .OrderByDescending(o => o.Version)
+                .ThenByDescending(o => o.Id)
                 .ToList();
 
             // If arg 1 is "diff" calculate the diff and append it to current core.js file
             if (args != null && args.Length > 0 && args[0] == "diff")
             {
-                // load current core.json file
+                // load current core.json file'
+#if TEST
+                IEnumerable<dotnetthanks.Release> corejson = LoadCurrentCoreJson();
+#endif
                 IEnumerable<dotnetthanks.Release> corejson = await LoadCurrentCoreJsonAsync();
                 var diff = sortedReleases.Except(corejson);
 
-                if (diff.Count() > 0)
+                if (diff.Any())
                 {
                     Console.WriteLine($"Processing diffs in releases...\n{repo} - {diff.Count()}");
 
                     // For each new release, find its prior release and add it into a new list for commit comparison
                     var sortedNewReleases = new List<dotnetthanks.Release>();
+                    var latestGARelease = corejson.ToList().Find(r => r.IsGA);
                     var newReleases = diff
+                        .ToList();
+
+                    newReleases.ForEach(r =>
+                    {
+                        var idx = sortedReleases.IndexOf(r);
+                        var previousVersion = sortedReleases[idx + 1];
+                        // Add new release
+                        sortedNewReleases.Add(r);
+                        // If previous version isn't in newReleases already - add it
+                        if (!newReleases.Contains(previousVersion))
+                        {
+                            // Append the latest processed release or last GA if first release
+                            if (r.Version.Major != previousVersion.Version.Major)
+                            {
+                                sortedNewReleases.Add(latestGARelease);
+                            }
+                            else if (r.Version.Major == previousVersion.Version.Major)
+                            {
+                                sortedNewReleases.Add(previousVersion);
+                            }
+                        }
+                        else if (newReleases.Contains(previousVersion) && r.Version.Major != previousVersion.Version.Major)
+                        {
+                            sortedNewReleases.Add(latestGARelease);
+                        }
+                    });
+
+                    sortedNewReleases = sortedNewReleases
                         .OrderByDescending(o => o.Version)
                         .ThenByDescending(o => o.Id)
                         .ToList();
 
-                    newReleases.ForEach(r => {
-                        if (sortedReleases.IndexOf(r) > -1)
-                        {
-                            sortedNewReleases.Add(r);
-                            sortedNewReleases.Add(sortedReleases[sortedReleases.IndexOf(r) + 1]);
-                        }
-                    });
-                    
                     // Process new list and trim the releases used for comparison
-                    await ProcessReleases(sortedNewReleases, repo);
-                    corejson = corejson.ToList().Concat(newReleases).OrderByDescending(o => o.Version).ThenByDescending(o => o.Id).ToList();
+                    await ProcessReleases(sortedNewReleases, repo, newReleases);
+                    corejson = corejson
+                        .ToList()
+                        .Concat(newReleases)
+                        .OrderByDescending(o => o.Version)
+                        .ThenByDescending(o => o.Id)
+                        .ToList();
 
-                    System.IO.File.WriteAllText($"./{repo}.json", JsonSerializer.Serialize(corejson));
+                    File.WriteAllText($"./{repo}.json", JsonSerializer.Serialize(corejson));
                 }
                 else
                 {
@@ -105,7 +135,7 @@ namespace dotnetthanks_loader
                 {
                     var myRepo = Environment.GetEnvironmentVariable("source");
                     var root = $"/app/{Environment.GetEnvironmentVariable("dir")}";
-                    var branch = $"thanks-data{Guid.NewGuid().ToString()}";
+                    var branch = $"thanks-data{Guid.NewGuid()}";
                     var output = new StringBuilder();
 
                     if (Debugger.IsAttached)
@@ -118,7 +148,7 @@ namespace dotnetthanks_loader
                         Directory.CreateDirectory(root);
                     }
 
-                    System.IO.File.WriteAllText($"/{root}/{repo}.json", JsonSerializer.Serialize(sortedReleases));
+                    File.WriteAllText($"/{root}/{repo}.json", JsonSerializer.Serialize(sortedReleases));
 
                     // clone the repo
                     output.AppendLine(Bash($"git -C {myRepo} pull"));
@@ -137,12 +167,12 @@ namespace dotnetthanks_loader
                 }
                 else
                 {
-                    System.IO.File.WriteAllText($"./{repo}.json", JsonSerializer.Serialize(sortedReleases));
+                    File.WriteAllText($"./{repo}.json", JsonSerializer.Serialize(sortedReleases));
                 }
             }
         }
 
-        private static async Task ProcessReleases(List<dotnetthanks.Release> releases, string repo)
+        private static async Task ProcessReleases(List<dotnetthanks.Release> releases, string repo, List<dotnetthanks.Release> diff = null)
         {
             // dotnet/core
             dotnetthanks.Release currentRelease;
@@ -151,6 +181,13 @@ namespace dotnetthanks_loader
             {
                 currentRelease = releases[i];
                 previousRelease = GetPreviousRelease(releases, currentRelease, i + 1);
+
+                // Skip any release comparisons that are not in diff
+                if (diff.Any() && !diff.Contains(currentRelease))
+                {
+                    continue;
+                }
+
                 if (previousRelease is null)
                 {
                     // Is this the first release?
@@ -209,10 +246,12 @@ namespace dotnetthanks_loader
         private static async Task<PullRequest> CreatePullRequestFromFork(string forkname, string branch)
         {
             var basic = new Credentials(_token);
-            var client = new GitHubClient(new ProductHeaderValue("dotnet-thanks"));
-            client.Credentials = basic;
+            var client = new GitHubClient(new ProductHeaderValue("dotnet-thanks"))
+            {
+                Credentials = basic
+            };
 
-            NewPullRequest newPr = new NewPullRequest("Update thanks data file", $"spboyer:{branch}", "master");
+            NewPullRequest newPr = new("Update thanks data file", $"spboyer:{branch}", "master");
 
             try
             {
@@ -254,7 +293,7 @@ namespace dotnetthanks_loader
                     var author = item.author;
                     author.name = item.commit.author.name;
 
-                    if (String.IsNullOrEmpty(author.name))
+                    if (string.IsNullOrEmpty(author.name))
                         author.name = "Unknown";
 
                     if (!exclusions.Contains(author.name.ToLower()))
@@ -358,7 +397,7 @@ namespace dotnetthanks_loader
 
                 return releaseCommits;
             }
-            catch (System.Exception ex)
+            catch (Exception ex)
             {
                 Console.WriteLine(ex.Message);
             }
@@ -366,6 +405,24 @@ namespace dotnetthanks_loader
             return null;
         }
 
+#if TEST
+        private static List<dotnetthanks.Release> LoadCurrentCoreJson()
+        {
+            try
+            {
+                string fileName = "core.json";
+                string jsonString = File.ReadAllText(fileName);
+                var corejson = JsonSerializer.Deserialize<List<dotnetthanks.Release>>(jsonString);
+                return corejson;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+            }
+
+            return null;
+        }
+#else
         private static async Task<List<dotnetthanks.Release>> LoadCurrentCoreJsonAsync()
         {
             _client = new HttpClient();
@@ -383,10 +440,12 @@ namespace dotnetthanks_loader
 
             return null;
         }
+#endif
+
         private static async Task<T> ExecuteWithRateLimitHandling<T>(Func<Task<T>> operation)
         {
             var remainingRetries = 3;
-            Retry:
+        Retry:
             try
             {
                 return await operation();
@@ -410,7 +469,7 @@ namespace dotnetthanks_loader
                 {
                     return await Task.FromException<T>(ex);
                 }
-                
+
             }
         }
 
