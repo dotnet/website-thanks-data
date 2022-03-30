@@ -4,11 +4,11 @@ using System.Text.RegularExpressions;
 namespace dotnetthanks
 {
     [DebuggerDisplay("Name = {Name}, GA = {IsGA}, Tag = {Tag}, Commit = {TargetCommit}")]
-    public class Release: IEquatable<Release>
+    public class Release : IEquatable<Release>
     {
         // The list of GA releases
         private static readonly HashSet<string> GaReleases = new()
-        { 
+        {
             "1.0.0",
             "v1.1",
             "v2.0.0",

@@ -17,15 +17,15 @@ public class Resources
     public CodeScanningUpload code_scanning_upload { get; set; }
 }
 
-public class CodeScanningUpload: Metrics
+public class CodeScanningUpload : Metrics
 {
 }
 
-public class SourceImport: Metrics
+public class SourceImport : Metrics
 {
 }
 
-public class IntegationManifest: Metrics
+public class IntegationManifest : Metrics
 {
 }
 
@@ -33,15 +33,15 @@ public class Graphql : Metrics
 {
 }
 
-public class Search: Metrics
+public class Search : Metrics
 {
 }
 
-public class Core: Metrics
+public class Core : Metrics
 {
 }
 
-public class Rate: Metrics
+public class Rate : Metrics
 {
 }
 
