@@ -74,6 +74,7 @@ namespace dotnetthanks
     {
         public string Name { get; set; }
         public string Link { get; set; }
+        public string Avatar { get; set; }
         public int Count { get; set; }
 
         public List<RepoItem> Repos { get; set; } = new List<RepoItem>();

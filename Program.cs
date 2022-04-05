@@ -267,6 +267,7 @@ namespace dotnetthanks_loader
                             {
                                 Name = author.name,
                                 Link = author.html_url,
+                                Avatar = author.avatar_url,
                                 Count = 1
                             };
                             person.Repos.Add(new RepoItem() { Name = repoName, Count = 1 });
