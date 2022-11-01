@@ -2,6 +2,8 @@ variables:
   BuildParameters.RestoreBuildProjects: '**/*.csproj'
   BuildConfiguration: release
   BuildPlatform: anycpu
+  Codeql.Enabled: true
+
 trigger:
   branches:
     include:
@@ -41,5 +43,5 @@ jobs:
   - task: PublishBuildArtifacts@1
     displayName: 'Publish Artifacts'
     inputs:
-      targetPath: '$(Build.ArtifactStagingDirectory)' 
+      targetPath: '$(Build.ArtifactStagingDirectory)'
       artifactName: 'website-thanks-data'
