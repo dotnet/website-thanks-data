@@ -23,7 +23,6 @@ namespace dotnetthanks_loader
             var config = new ConfigurationBuilder()
                 .SetBasePath(AppDomain.CurrentDomain.BaseDirectory)
                 .AddEnvironmentVariables()
-                .AddUserSecrets<Program>()
                 .Build();
 
             _token = config.GetSection("GITHUB_TOKEN").Value;
@@ -132,44 +131,7 @@ namespace dotnetthanks_loader
 
                 await ProcessReleases(sortedReleases, repo);
 
-                if (InDocker)
-                {
-                    var myRepo = Environment.GetEnvironmentVariable("source");
-                    var root = $"/app/{Environment.GetEnvironmentVariable("dir")}";
-                    var branch = $"thanks-data{Guid.NewGuid()}";
-                    var output = new StringBuilder();
-
-                    if (Debugger.IsAttached)
-                    {
-                        root = Environment.GetEnvironmentVariable("dir");
-                    }
-
-                    if (!Directory.Exists(root))
-                    {
-                        Directory.CreateDirectory(root);
-                    }
-
-                    File.WriteAllText($"/{root}/{repo}.json", JsonSerializer.Serialize(sortedReleases));
-
-                    // clone the repo
-                    output.AppendLine(Bash($"git -C {myRepo} pull"));
-                    // create branch 
-                    output.AppendLine(Bash($"git checkout -b {branch}"));
-
-                    output.AppendLine(Bash($"git add /{root}/{repo}.json"));
-                    output.AppendLine(Bash($"git commit -m '{repo}.json added'"));
-                    output.AppendLine(Bash($"git push --set-upstream origin {branch}"));
-
-                    Console.WriteLine(output.ToString());
-
-                    var pr = await CreatePullRequestFromFork("spboyer/website-resources", branch);
-
-                    Console.WriteLine(pr.HtmlUrl);
-                }
-                else
-                {
-                    File.WriteAllText($"./{repo}.json", JsonSerializer.Serialize(sortedReleases));
-                }
+                File.WriteAllText($"./{repo}.json", JsonSerializer.Serialize(sortedReleases));
             }
         }
 
@@ -245,30 +207,6 @@ namespace dotnetthanks_loader
             }
         }
 #nullable disable
-
-        private static async Task<PullRequest> CreatePullRequestFromFork(string forkname, string branch)
-        {
-            var basic = new Credentials(_token);
-            var client = new GitHubClient(new ProductHeaderValue("dotnet-thanks"))
-            {
-                Credentials = basic
-            };
-
-            NewPullRequest newPr = new("Update thanks data file", $"spboyer:{branch}", "master");
-
-            try
-            {
-                var pullRequest = await client.PullRequest.Create("dotnet", "website-resources", newPr);
-
-                return pullRequest;
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine(ex.Message);
-            }
-
-            return null;
-        }
 
         /// <summary>
         /// Find the previous release for the current release in the sorted collection of all releases.
@@ -474,28 +412,6 @@ namespace dotnetthanks_loader
 
             }
         }
-
-        private static string Bash(string cmd)
-        {
-            var escapedArgs = cmd.Replace("\"", "\\\"");
-
-            var process = new Process()
-            {
-                StartInfo = new ProcessStartInfo
-                {
-                    FileName = "/bin/bash",
-                    Arguments = $"-c \"{escapedArgs}\"",
-                    RedirectStandardOutput = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                }
-            };
-            process.Start();
-            string result = process.StandardOutput.ReadToEnd();
-            process.WaitForExit();
-            return result;
-        }
-
     }
 
 }
