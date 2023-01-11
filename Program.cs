@@ -13,7 +13,7 @@ namespace dotnetthanks_loader
     class Program
     {
         private static HttpClient _client;
-        private static readonly string[] exclusions = new string[] { "dependabot[bot]", "github-actions[bot]", "msftbot[bot]", "github-actions[bot]", "dotnet-bot", "dotnet bot", "nuget team bot" };
+        private static readonly string[] exclusions = new string[] { "dependabot[bot]", "github-actions[bot]", "msftbot[bot]", "github-actions[bot]", "dotnet-bot", "dotnet bot", "nuget team bot", "NET Source-Build Bot" };
         private static string _token;
         private List<dotnetthanks.Release> sortedReleasesList = new ();
 
@@ -60,7 +60,7 @@ namespace dotnetthanks_loader
                 .ThenByDescending(o => o.Id)
                 .ToList();
 
-            Dictionary<int, dotnetthanks.Release> sortedMajorReleasesDictionary = new ();
+            Dictionary<string, dotnetthanks.Release> sortedMajorReleasesDictionary = new ();
             List<dotnetthanks.Release> sortedMajorReleasesList = new ();
 
             // If arg 1 is "diff" calculate the diff and append it to current core.js file
@@ -75,9 +75,9 @@ namespace dotnetthanks_loader
                 // create a dictionary with preprocessed data
                 foreach (var release in corejson)
                 {
-                    if (release.Version.Minor == 0 && release.Version.Build == 0 && string.IsNullOrEmpty(release.VersionLabel))
+                    if (release.IsGA)
                     {
-                        sortedMajorReleasesDictionary.Add(release.Version.Major, release);
+                        sortedMajorReleasesDictionary.Add($"{release.Version.Major}.{release.Version.Minor}", release);
                     }
                 }
 
@@ -88,10 +88,16 @@ namespace dotnetthanks_loader
                     processedReleases.AddRange(o.ProcessedReleases);
                 }
 
-                // remove the very first release to avoid processing out of bounds
-                sortedReleases.RemoveAt(sortedReleases.Count - 1);
+                List<dotnetthanks.Release> diff = sortedReleases.Where(o => !processedReleases.Contains(o.Tag)).ToList();
 
-                var diff = sortedReleases.Where(o => !processedReleases.Contains(o.Tag)).ToList();
+                // Check if releases in diff are not in dictionary
+                foreach (var release in diff)
+                {
+                    if (release.IsGA && !sortedMajorReleasesDictionary.ContainsKey($"{release.Version.Major}.{release.Version.Minor}"))
+                    {
+                        sortedMajorReleasesDictionary.Add($"{release.Version.Major}.{release.Version.Minor}", release);
+                    }
+                }
 
                 if (diff.Any())
                 {
@@ -102,12 +108,14 @@ namespace dotnetthanks_loader
                     List<dotnetthanks.Release> majorReleasesList = new ();
                     var latestGARelease = corejson.ToList().Find(r => r.IsGA);
 
-                    diff.ForEach(r =>
+                    foreach(var r in diff)
                     {
                         var idx = sortedReleases.IndexOf(r);
                         var previousVersion = sortedReleases[idx + 1];
+
                         // Add new release
                         sortedNewReleases.Add(r);
+
                         // If previous version isn't in newReleases already - add it
                         if (!diff.Contains(previousVersion))
                         {
@@ -125,7 +133,7 @@ namespace dotnetthanks_loader
                         {
                             sortedNewReleases.Add(latestGARelease);
                         }
-                    });
+                    }
 
                     sortedNewReleases = sortedNewReleases
                         .OrderByDescending(o => o.Version)
@@ -149,9 +157,9 @@ namespace dotnetthanks_loader
                 // create a dictionary for major versions
                 foreach (var release in sortedReleases)
                 {
-                    if (release.Version.Minor == 0 && release.Version.Build == 0 && string.IsNullOrEmpty(release.VersionLabel))
+                    if (release.IsGA)
                     {
-                        sortedMajorReleasesDictionary.Add(release.Version.Major, release);
+                        sortedMajorReleasesDictionary.Add($"{release.Version.Major}.{release.Version.Minor}", release);
                     }
                 }
 
@@ -166,14 +174,23 @@ namespace dotnetthanks_loader
         }
 
 #nullable enable
-        private static async Task ProcessReleases(List<dotnetthanks.Release> releases, Dictionary<int, dotnetthanks.Release> majorReleasesDict, string repo, bool isDiff = false)
+        private static async Task ProcessReleases(List<dotnetthanks.Release> releases, Dictionary<string, dotnetthanks.Release> majorReleasesDict, string repo, bool isDiff = false)
         {
             // dotnet/core
             dotnetthanks.Release currentRelease;
             dotnetthanks.Release previousRelease;
-            for (int i = 0; i < releases.Count - 1; i++)
+            for (int i = 0; i < releases.Count; i++)
             {
                 currentRelease = releases[i];
+                majorReleasesDict.TryGetValue($"{currentRelease.Version.Major}.{currentRelease.Version.Minor}", out var majorRelease);
+
+                // Add the first release to the list of processed releases so diff does not pick it up
+                if (i == releases.Count - 1)
+                {
+                    majorRelease?.ProcessedReleases.Add(currentRelease.Tag);
+                    break;
+                }
+
                 previousRelease = GetPreviousRelease(releases, currentRelease, i + 1);
 
                 if (previousRelease is null)
@@ -184,7 +201,6 @@ namespace dotnetthanks_loader
                     continue;
                 }
 
-                majorReleasesDict.TryGetValue(currentRelease.Version.Major, out var majorRelease);
                 majorRelease?.ProcessedReleases.Add(currentRelease.Tag);
 
                 Console.WriteLine($"Processing:[{i}] {repo} {previousRelease.Tag}..{currentRelease.Tag}");
