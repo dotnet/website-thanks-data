@@ -31,6 +31,20 @@ namespace dotnetthanks
             get => GaReleases.Contains(Tag);
         }
         public string Name { get; set; }
+        public string Product
+        {
+            get
+            {
+                if (Name.IndexOf("Core") > 0)
+                {
+                    return ".NET Core";
+                }
+                else
+                {
+                    return ".NET";
+                }
+            }
+        }
         public string Tag
         {
             get => _tag;

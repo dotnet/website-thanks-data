@@ -15,7 +15,6 @@ namespace dotnetthanks_loader
         private static HttpClient _client;
         private static readonly string[] exclusions = new string[] { "dependabot[bot]", "github-actions[bot]", "msftbot[bot]", "github-actions[bot]", "dotnet-bot", "dotnet bot", "nuget team bot", "NET Source-Build Bot" };
         private static string _token;
-        private List<dotnetthanks.Release> sortedReleasesList = new ();
 
         private static GitHubClient _ghclient;
 
