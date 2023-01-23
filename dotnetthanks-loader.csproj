@@ -14,7 +14,7 @@
     <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="7.0.0" />
     <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="7.0.0" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
-    <PackageReference Include="octokit" Version="4.0.1" />
+    <PackageReference Include="octokit" Version="5.0.0" />
   </ItemGroup>
 
 </Project>
