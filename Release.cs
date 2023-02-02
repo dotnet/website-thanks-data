@@ -9,7 +9,7 @@ namespace dotnetthanks
         // The list of GA releases
         private static readonly HashSet<string> GaReleases = new()
         {
-            "1.0.0",
+            "v1.0.0",
             "v1.1",
             "v2.0.0",
             "v2.1.0",
@@ -17,7 +17,8 @@ namespace dotnetthanks
             "v3.0.0",
             "v3.1.0",
             "v5.0.0",
-            "v6.0.0"
+            "v6.0.0",
+            "v7.0.0"
         };
         private string _tag;
 
@@ -30,6 +31,20 @@ namespace dotnetthanks
             get => GaReleases.Contains(Tag);
         }
         public string Name { get; set; }
+        public string Product
+        {
+            get
+            {
+                if (Name.IndexOf("Core") > 0)
+                {
+                    return ".NET Core";
+                }
+                else
+                {
+                    return ".NET";
+                }
+            }
+        }
         public string Tag
         {
             get => _tag;
@@ -46,6 +61,7 @@ namespace dotnetthanks
 
         public Version Version { get; private set; }
         public string VersionLabel { get; private set; }
+        public List<string> ProcessedReleases { get; set; } = new List<string>();
         public bool Equals(Release other)
         {
             if (other is null)
