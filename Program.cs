@@ -13,7 +13,20 @@ namespace dotnetthanks_loader
     class Program
     {
         private static HttpClient _client;
-        private static readonly string[] exclusions = new string[] { "dependabot[bot]", "github-actions[bot]", "msftbot[bot]", "github-actions[bot]", "dotnet-bot", "dotnet bot", "nuget team bot", "NET Source-Build Bot" };
+        private static readonly string[] exclusions = new string[]
+        {
+            "dependabot[bot]",
+            "github-actions[bot]",
+            "msftbot[bot]",
+            "github-actions[bot]",
+            "dotnet bot",
+            "dotnet-bot",
+            "nuget team bot",
+            "net source-build bot",
+            "dotnet-maestro-bot",
+            "dotnet-maestro[bot]",
+            "labade youval"
+        };
         private static string _token;
 
         private static GitHubClient _ghclient;
@@ -71,7 +84,7 @@ namespace dotnetthanks_loader
 #else
                 IEnumerable<dotnetthanks.Release> corejson = await LoadCurrentCoreJsonAsync();
 #endif
-                // create a dictionary with preprocessed data
+                // create a dictionary with preprocessed
                 foreach (var release in corejson)
                 {
                     if (release.IsGA)
