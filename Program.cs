@@ -84,7 +84,7 @@ namespace dotnetthanks_loader
 #else
                 IEnumerable<dotnetthanks.Release> corejson = await LoadCurrentCoreJsonAsync();
 #endif
-                // create a dictionary with preprocessed
+                // create a dictionary with preprocessed data
                 foreach (var release in corejson)
                 {
                     if (release.IsGA)
