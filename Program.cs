@@ -24,8 +24,7 @@ namespace dotnetthanks_loader
             "nuget team bot",
             "net source-build bot",
             "dotnet-maestro-bot",
-            "dotnet-maestro[bot]",
-            "labade youval"
+            "dotnet-maestro[bot]"
         };
         private static string _token;
 
