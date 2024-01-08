@@ -114,7 +114,7 @@ namespace dotnetthanks_loader
                     }
                 }
 
-                if (diff.Any())
+                if (diff.Count != 0)
                 {
                     Console.WriteLine($"Processing diffs in releases...\n{repo} - {diff.Count}");
 
