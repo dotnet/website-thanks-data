@@ -225,7 +225,7 @@ namespace dotnetthanks_loader
                 {
                     // Is this the first release?
                     Console.WriteLine($"[INFO]: {currentRelease.Tag} is the first release in the series.");
-                    Debugger.Break();
+                    //Debugger.Break();
                     continue;
                 }
 
