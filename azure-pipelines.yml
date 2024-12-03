@@ -1,23 +1,28 @@
+---
 variables:
   BuildParameters.RestoreBuildProjects: '**/*.csproj'
   BuildConfiguration: release
   BuildPlatform: anycpu
   Codeql.Enabled: true
+
 trigger:
   branches:
     include:
-    - '*'
-  batch: True
+      - '*'
+  batch: true
+
 name: $(date:yyyyMMdd)$(rev:.r)
+
 resources:
   repositories:
-  - repository: self
-    type: git
-    ref: main
-  - repository: 1ESPipelineTemplates
-    type: git
-    name: 1ESPipelineTemplates/1ESPipelineTemplates
-    ref: refs/tags/release
+    - repository: self
+      type: git
+      ref: main
+    - repository: 1ESPipelineTemplates
+      type: git
+      name: 1ESPipelineTemplates/1ESPipelineTemplates
+      ref: refs/tags/release
+
 extends:
   template: v1/1ES.Official.PipelineTemplate.yml@1ESPipelineTemplates
   parameters:
@@ -26,35 +31,35 @@ extends:
       image: 1ESPT-Windows2022
       os: windows
     customBuildTags:
-    - ES365AIMigrationTooling
+      - ES365AIMigrationTooling
     stages:
-    - stage: stage
-      jobs:
-      - job: Phase_1
-        displayName: Agent job 1
-        timeoutInMinutes: 0
-        templateContext:
-          outputs:
-          - output: pipelineArtifact
-            displayName: 'Publish Artifacts'
-            artifactName: 'website-thanks-data'
-            targetPath: $(build.artifactstagingdirectory)
-        steps:
-        - checkout: self
-        - task: UseDotNet@2
-          displayName: Use .NET 8 SDK
-          inputs:
-            version: 8.x
-            includePreviewVersions: true
-        - task: DotNetCoreCLI@2
-          displayName: Build
-          inputs:
-            projects: $(BuildParameters.RestoreBuildProjects)
-            arguments: --configuration $(BuildConfiguration)
-        - task: DotNetCoreCLI@2
-          displayName: 'Publish'
-          inputs:
-            command: publish
-            publishWebProjects: false
-            arguments: '--configuration $(BuildConfiguration) --output $(Build.ArtifactStagingDirectory)'
-            zipAfterPublish: True
+      - stage: stage
+        jobs:
+          - job: Phase_1
+            displayName: Agent job 1
+            timeoutInMinutes: 0
+            templateContext:
+              outputs:
+                - output: pipelineArtifact
+                  displayName: 'Publish Artifacts'
+                  artifactName: 'website-thanks-data'
+                  targetPath: $(build.artifactstagingdirectory)
+            steps:
+              - checkout: self
+              - task: UseDotNet@2
+                displayName: Use .NET 9 SDK
+                inputs:
+                  version: 9.x
+                  includePreviewVersions: true
+              - task: DotNetCoreCLI@2
+                displayName: Build
+                inputs:
+                  projects: $(BuildParameters.RestoreBuildProjects)
+                  arguments: --configuration $(BuildConfiguration)
+              - task: DotNetCoreCLI@2
+                displayName: 'Publish'
+                inputs:
+                  command: publish
+                  publishWebProjects: false
+                  arguments: '--configuration $(BuildConfiguration) --output $(Build.ArtifactStagingDirectory)'
+                  zipAfterPublish: true
