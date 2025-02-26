@@ -19,7 +19,8 @@ namespace dotnetthanks
             "v5.0.0",
             "v6.0.0",
             "v7.0.0",
-            "v8.0.0"
+            "v8.0.0",
+            "v9.0.0"
         };
         private string _tag;
 
