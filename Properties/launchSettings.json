@@ -1,0 +1,12 @@
+{
+  "profiles": {
+    "dotnetthanks-loader": {
+      "commandName": "Project",
+      "environmentVariables": {
+        "GITHUB_CLIENTSECRET": "",
+        "GITHUB_TOKEN": "",
+        "GITHUB_CLIENTID": ""
+      }
+    }
+  }
+}
