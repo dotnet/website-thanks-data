@@ -27,7 +27,7 @@ namespace dotnetthanks
         public List<ChildRepo> ChildRepos { get; set; }
         public List<Contributor> Contributors { get; set; }
         public int Contributions { get; set; }
-        public int Id { get; set; }
+        public long Id { get; set; }
         public bool IsGA
         {
             get => GaReleases.Contains(Tag);
