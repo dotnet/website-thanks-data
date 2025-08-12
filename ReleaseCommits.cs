@@ -1,5 +1,5 @@
 // Root myDeserializedClass = JsonConvert.DeserializeObject<Root>(myJsonResponse); 
-
+namespace dotnetthanks_loader;
 public class Committer
 {
     public string name { get; set; }

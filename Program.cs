@@ -1,5 +1,4 @@
-﻿using dotnetthanks;
-using Microsoft.Extensions.Configuration;
+﻿using Microsoft.Extensions.Configuration;
 using Octokit;
 using System.Diagnostics;
 using System.Net.Http.Json;
@@ -46,7 +45,7 @@ namespace dotnetthanks_loader
             var owner = "dotnet";
 
             // load all releases for dotnet/core
-            IEnumerable<dotnetthanks.Release> allReleases = await LoadReleasesAsync(owner, repo);
+            IEnumerable<Release> allReleases = await LoadReleasesAsync(owner, repo);
 
             // Sort releases from the yongest to the oldest by version
             // E.g.
@@ -64,21 +63,21 @@ namespace dotnetthanks_loader
             //      3.1.0       // GA
             //      ...
             //
-            List<dotnetthanks.Release> sortedReleases = [..allReleases
+            List<Release> sortedReleases = [..allReleases
                 .OrderByDescending(o => o.Version)
                 .ThenByDescending(o => o.Id)];
 
-            Dictionary<string, dotnetthanks.MajorRelease> sortedMajorReleasesDictionary = [];
-            List<dotnetthanks.MajorRelease> sortedMajorReleasesList = [];
+            Dictionary<string, MajorRelease> sortedMajorReleasesDictionary = [];
+            List<MajorRelease> sortedMajorReleasesList = [];
 
             // If arg 1 is "diff" calculate the diff and append it to current core.js file
             if (args != null && args.Length > 0 && args[0] == "diff")
             {
                 // load current core.json file
 #if DEBUG
-                IEnumerable<dotnetthanks.MajorRelease> corejson = LoadCurrentCoreJson();
+                IEnumerable<MajorRelease> corejson = LoadCurrentCoreJson();
 #else
-                IEnumerable<dotnetthanks.MajorRelease> corejson = await LoadCurrentCoreJsonAsync();
+                IEnumerable<MajorRelease> corejson = await LoadCurrentCoreJsonAsync();
 #endif
                 // create a dictionary with preprocessed data
                 foreach (var release in corejson)
@@ -93,7 +92,7 @@ namespace dotnetthanks_loader
                     processedReleases.AddRange(o.ProcessedReleases);
                 }
 
-                List<dotnetthanks.Release> diff = [..sortedReleases.Where(o => !processedReleases.Contains(o.Tag))];
+                List<Release> diff = [..sortedReleases.Where(o => !processedReleases.Contains(o.Tag))];
 
                 // Check if releases in diff are not in dictionary
                 foreach (var release in diff)
@@ -118,8 +117,8 @@ namespace dotnetthanks_loader
                     Console.WriteLine($"Processing diffs in releases...\n{repo} - {diff.Count}");
 
                     // For each new release, find its prior release and add it into a new list for commit comparison
-                    List<dotnetthanks.Release> sortedNewReleases = [];
-                    List<dotnetthanks.Release> majorReleasesList = [];
+                    List<Release> sortedNewReleases = [];
+                    List<Release> majorReleasesList = [];
                     var latestGARelease = sortedReleases.ToList().Find(r => r.IsGA);
 
                     foreach(var r in diff)
@@ -197,11 +196,11 @@ namespace dotnetthanks_loader
         }
 
 #nullable enable
-        private static async Task ProcessReleases(List<dotnetthanks.Release> releases, Dictionary<string, dotnetthanks.MajorRelease> majorReleasesDict, string repo, bool isDiff = false)
+        private static async Task ProcessReleases(List<Release> releases, Dictionary<string, MajorRelease> majorReleasesDict, string repo, bool isDiff = false)
         {
             // dotnet/core
-            dotnetthanks.Release currentRelease;
-            dotnetthanks.Release previousRelease;
+            Release currentRelease;
+            Release previousRelease;
             for (int i = 0; i < releases.Count; i++)
             {
                 currentRelease = releases[i];
@@ -280,7 +279,7 @@ namespace dotnetthanks_loader
         }
 #nullable disable
 
-        private static async Task<PullRequest> CreatePullRequestFromFork(string forkname, string branch)
+        private static async Task<PullRequest> CreatePullRequestFromFork(string _, string branch)
         {
             var basic = new Credentials(_token);
             var client = new GitHubClient(new ProductHeaderValue("dotnet-thanks"))
@@ -311,7 +310,7 @@ namespace dotnetthanks_loader
         /// </summary>
         /// <param name="index">The index of the <paramref name="currentRelease"/> in the <paramref name="sortedReleases"/> list.</param>
         /// <returns>The previous release, if found; otherwise <see cref="null"/>, if the current release if the first release.</returns>
-        private static dotnetthanks.Release GetPreviousRelease(List<dotnetthanks.Release> sortedReleases, dotnetthanks.Release currentRelease, int index)
+        private static Release GetPreviousRelease(List<Release> sortedReleases, Release currentRelease, int index)
         {
             if (currentRelease.Version.Major == sortedReleases[index].Version.Major &&
                 currentRelease.Version.Minor == sortedReleases[index].Version.Minor)
@@ -320,7 +319,7 @@ namespace dotnetthanks_loader
             return sortedReleases.Skip(index).FirstOrDefault(r => currentRelease.Version > r.Version && r.IsGA);
         }
 
-        private static void TallyCommits(dotnetthanks.MajorRelease majorRelease, string repoName, List<MergeBaseCommit> commits)
+        private static void TallyCommits(MajorRelease majorRelease, string repoName, List<MergeBaseCommit> commits)
         {
             // these the commits within the release
             foreach (var item in commits)
@@ -339,7 +338,7 @@ namespace dotnetthanks_loader
                         var person = majorRelease.Contributors.Find(p => p.Link == author.html_url);
                         if (person == null)
                         {
-                            person = new dotnetthanks.Contributor()
+                            person = new Contributor()
                             {
                                 Name = author.name,
                                 Link = author.html_url,
@@ -370,11 +369,11 @@ namespace dotnetthanks_loader
             }
         }
 
-        private static async Task<IEnumerable<dotnetthanks.Release>> LoadReleasesAsync(string owner, string repo)
+        private static async Task<IEnumerable<Release>> LoadReleasesAsync(string owner, string repo)
         {
             var results = await _ghclient.Repository.Release.GetAll(owner, repo);
 
-            return results.Select(release => new dotnetthanks.Release
+            return results.Select(release => new Release
             {
                 Name = release.Name,
                 Tag = release.TagName,
@@ -443,13 +442,13 @@ namespace dotnetthanks_loader
             return null;
         }
 
-        private static List<dotnetthanks.MajorRelease> LoadCurrentCoreJson()
+        private static List<MajorRelease> LoadCurrentCoreJson()
         {
             try
             {
                 string fileName = "core.json";
                 string jsonString = File.ReadAllText(fileName);
-                var corejson = JsonSerializer.Deserialize<List<dotnetthanks.MajorRelease>>(jsonString);
+                var corejson = JsonSerializer.Deserialize<List<MajorRelease>>(jsonString);
                 return corejson;
             }
             catch (Exception ex)
@@ -460,14 +459,14 @@ namespace dotnetthanks_loader
             return null;
         }
 
-        private static async Task<List<dotnetthanks.MajorRelease>> LoadCurrentCoreJsonAsync()
+        private static async Task<List<MajorRelease>> LoadCurrentCoreJsonAsync()
         {
             _client = new HttpClient();
             var url = "https://dotnetwebsitestorage.blob.core.windows.net/blob-assets/json/thanks/core.json";
 
             try
             {
-                var response = await _client.GetFromJsonAsync<List<dotnetthanks.MajorRelease>>(url);
+                var response = await _client.GetFromJsonAsync<List<MajorRelease>>(url);
                 return response;
             }
             catch (Exception ex)

@@ -1,4 +1,4 @@
-namespace dotnetthanks
+namespace dotnetthanks_loader
 {
     public class MajorRelease
     {

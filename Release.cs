@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 
-namespace dotnetthanks
+namespace dotnetthanks_loader
 {
     [DebuggerDisplay("Name = {Name}, GA = {IsGA}, Tag = {Tag}, Commit = {TargetCommit}")]
     public class Release : IEquatable<Release>
@@ -77,8 +77,7 @@ namespace dotnetthanks
 
         private void ParseVersion()
         {
-            const string pattern = "(v)?(?<version>\\d+.\\d+(.\\d+)?)(-(?<label>.*))?";
-            Match m = Regex.Match(_tag, pattern, RegexOptions.Compiled | RegexOptions.Singleline);
+            Match m = RegexHelper.VersionRegex().Match(_tag);
             if (!m.Success)
                 throw new ArgumentException($"Tag '{_tag}' has unexpected format");
 
@@ -118,7 +117,12 @@ namespace dotnetthanks
             get => "dotnet"; // this.Url?.Split("/")[3];
 
         }
+        public string Tag { get => Url?[(Url.LastIndexOf($"/") + 1)..].Trim(); }
+    }
 
-        public string Tag { get => Url?.Substring(Url.LastIndexOf($"/") + 1).Trim(); }
+    public partial class RegexHelper
+    {
+        [GeneratedRegex("(v)?(?<version>\\d+.\\d+(.\\d+)?)(-(?<label>.*))?", RegexOptions.Compiled | RegexOptions.Singleline)]
+        public static partial Regex VersionRegex();
     }
 }
