@@ -7,8 +7,8 @@ namespace dotnetthanks
     public class Release : IEquatable<Release>
     {
         // The list of GA releases
-        private static readonly HashSet<string> GaReleases = new()
-        {
+        private static readonly HashSet<string> GaReleases =
+        [
             "v1.0.0",
             "v1.1",
             "v2.0.0",
@@ -21,7 +21,7 @@ namespace dotnetthanks
             "v7.0.0",
             "v8.0.0",
             "v9.0.0"
-        };
+        ];
         private string _tag;
 
         public List<ChildRepo> ChildRepos { get; set; }
@@ -63,7 +63,7 @@ namespace dotnetthanks
 
         public Version Version { get; private set; }
         public string VersionLabel { get; private set; }
-        public List<string> ProcessedReleases { get; set; } = new List<string>();
+        public List<string> ProcessedReleases { get; set; } = [];
         public bool Equals(Release other)
         {
             if (other is null)
@@ -95,7 +95,7 @@ namespace dotnetthanks
         public string Avatar { get; set; }
         public int Count { get; set; }
 
-        public List<RepoItem> Repos { get; set; } = new List<RepoItem>();
+        public List<RepoItem> Repos { get; set; } = [];
     }
 
     [DebuggerDisplay("Name = {Name}, Count = {Count}")]

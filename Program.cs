@@ -11,8 +11,8 @@ namespace dotnetthanks_loader
     class Program
     {
         private static HttpClient _client;
-        private static readonly string[] exclusions = new string[]
-        {
+        private static readonly string[] exclusions =
+        [
             "dependabot[bot]",
             "github-actions[bot]",
             "msftbot[bot]",
@@ -23,7 +23,7 @@ namespace dotnetthanks_loader
             "net source-build bot",
             "dotnet-maestro-bot",
             "dotnet-maestro[bot]"
-        };
+        ];
         private static string _token;
 
         private static GitHubClient _ghclient;
@@ -64,13 +64,12 @@ namespace dotnetthanks_loader
             //      3.1.0       // GA
             //      ...
             //
-            List<dotnetthanks.Release> sortedReleases = allReleases
+            List<dotnetthanks.Release> sortedReleases = [..allReleases
                 .OrderByDescending(o => o.Version)
-                .ThenByDescending(o => o.Id)
-                .ToList();
+                .ThenByDescending(o => o.Id)];
 
-            Dictionary<string, dotnetthanks.MajorRelease> sortedMajorReleasesDictionary = new ();
-            List<dotnetthanks.MajorRelease> sortedMajorReleasesList = new ();
+            Dictionary<string, dotnetthanks.MajorRelease> sortedMajorReleasesDictionary = [];
+            List<dotnetthanks.MajorRelease> sortedMajorReleasesList = [];
 
             // If arg 1 is "diff" calculate the diff and append it to current core.js file
             if (args != null && args.Length > 0 && args[0] == "diff")
@@ -87,14 +86,14 @@ namespace dotnetthanks_loader
                     sortedMajorReleasesDictionary.Add($"{release.Version.Major}.{release.Version.Minor}", release);
                 }
 
-                List<string> processedReleases = new();
+                List<string> processedReleases = [];
 
                 foreach (var o in corejson)
                 {
                     processedReleases.AddRange(o.ProcessedReleases);
                 }
 
-                List<dotnetthanks.Release> diff = sortedReleases.Where(o => !processedReleases.Contains(o.Tag)).ToList();
+                List<dotnetthanks.Release> diff = [..sortedReleases.Where(o => !processedReleases.Contains(o.Tag))];
 
                 // Check if releases in diff are not in dictionary
                 foreach (var release in diff)
@@ -104,12 +103,12 @@ namespace dotnetthanks_loader
                         sortedMajorReleasesDictionary.Add($"{release.Version.Major}.{release.Version.Minor}", new MajorRelease
                         {
                             Contributions = 0,
-                            Contributors = new(),
+                            Contributors = [],
                             Product = release.Product,
                             Name = $"{release.Product} {release.Version.Major}.{release.Version.Minor}",
                             Version = release.Version,
                             Tag = $"v{release.Version.Major}.{release.Version.Minor}",
-                            ProcessedReleases = new()
+                            ProcessedReleases = []
                         });
                     }
                 }
@@ -119,8 +118,8 @@ namespace dotnetthanks_loader
                     Console.WriteLine($"Processing diffs in releases...\n{repo} - {diff.Count}");
 
                     // For each new release, find its prior release and add it into a new list for commit comparison
-                    List<dotnetthanks.Release> sortedNewReleases = new ();
-                    List<dotnetthanks.Release> majorReleasesList = new ();
+                    List<dotnetthanks.Release> sortedNewReleases = [];
+                    List<dotnetthanks.Release> majorReleasesList = [];
                     var latestGARelease = sortedReleases.ToList().Find(r => r.IsGA);
 
                     foreach(var r in diff)
@@ -150,15 +149,14 @@ namespace dotnetthanks_loader
                         }
                     }
 
-                    sortedNewReleases = sortedNewReleases
+                    sortedNewReleases = [..sortedNewReleases
                         .OrderByDescending(o => o.Version)
-                        .ThenByDescending(o => o.Id)
-                        .ToList();
+                        .ThenByDescending(o => o.Id)];
 
                     // Process new list and trim the releases used for comparison
                     await ProcessReleases(sortedNewReleases, sortedMajorReleasesDictionary, repo, true);
 
-                    sortedMajorReleasesList = sortedMajorReleasesDictionary.Values.OrderByDescending(o => o.Version).ToList();
+                    sortedMajorReleasesList = [.. sortedMajorReleasesDictionary.Values.OrderByDescending(o => o.Version)];
 
                     File.WriteAllText($"./{repo}.json", JsonSerializer.Serialize(sortedMajorReleasesList));
                 }
@@ -177,12 +175,12 @@ namespace dotnetthanks_loader
                         var majorRelease = new MajorRelease
                         {
                             Contributions = 0,
-                            Contributors = new (),
+                            Contributors = [],
                             Product = release.Product,
                             Name = $"{release.Product} {release.Version.Major}.{release.Version.Minor}",
                             Version = release.Version,
                             Tag = $"v{release.Version.Major}.{release.Version.Minor}",
-                            ProcessedReleases = new ()
+                            ProcessedReleases = []
                         };
                         sortedMajorReleasesDictionary.Add($"{release.Version.Major}.{release.Version.Minor}", majorRelease);
                     }
@@ -192,7 +190,7 @@ namespace dotnetthanks_loader
 
                 await ProcessReleases(sortedReleases, sortedMajorReleasesDictionary, repo);
 
-                sortedMajorReleasesList = sortedMajorReleasesDictionary.Values.ToList();
+                sortedMajorReleasesList = [.. sortedMajorReleasesDictionary.Values];
 
                 File.WriteAllText($"./{repo}.json", JsonSerializer.Serialize(sortedMajorReleasesList));
             }
@@ -382,7 +380,7 @@ namespace dotnetthanks_loader
                 Tag = release.TagName,
                 Id = release.Id,
                 ChildRepos = ParseReleaseBody(release.Body),
-                Contributors = new List<dotnetthanks.Contributor>()
+                Contributors = []
             });
         }
 
