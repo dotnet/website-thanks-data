@@ -33,7 +33,6 @@ namespace dotnetthanks_loader
             var config = new ConfigurationBuilder()
                 .SetBasePath(AppDomain.CurrentDomain.BaseDirectory)
                 .AddEnvironmentVariables()
-                .AddUserSecrets<Program>()
                 .Build();
 
             _token = config.GetSection("GITHUB_TOKEN").Value;
@@ -281,30 +280,6 @@ namespace dotnetthanks_loader
             }
         }
 #nullable disable
-
-        private static async Task<PullRequest> CreatePullRequestFromFork(string forkname, string branch)
-        {
-            var basic = new Credentials(_token);
-            var client = new GitHubClient(new ProductHeaderValue("dotnet-thanks"))
-            {
-                Credentials = basic
-            };
-
-            NewPullRequest newPr = new("Update thanks data file", $"spboyer:{branch}", "master");
-
-            try
-            {
-                var pullRequest = await client.PullRequest.Create("dotnet", "website-resources", newPr);
-
-                return pullRequest;
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine(ex.Message);
-            }
-
-            return null;
-        }
 
         /// <summary>
         /// Find the previous release for the current release in the sorted collection of all releases.
