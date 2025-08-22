@@ -1,4 +1,4 @@
-﻿
+﻿namespace dotnetthanks_loader;
 public class RateLimit
 {
     public Resources resources { get; set; }

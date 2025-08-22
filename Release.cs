@@ -1,14 +1,14 @@
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 
-namespace dotnetthanks
+namespace dotnetthanks_loader
 {
     [DebuggerDisplay("Name = {Name}, GA = {IsGA}, Tag = {Tag}, Commit = {TargetCommit}")]
     public class Release : IEquatable<Release>
     {
         // The list of GA releases
-        private static readonly HashSet<string> GaReleases = new()
-        {
+        private static readonly HashSet<string> GaReleases =
+        [
             "v1.0.0",
             "v1.1",
             "v2.0.0",
@@ -21,7 +21,7 @@ namespace dotnetthanks
             "v7.0.0",
             "v8.0.0",
             "v9.0.0"
-        };
+        ];
         private string _tag;
 
         public List<ChildRepo> ChildRepos { get; set; }
@@ -63,7 +63,7 @@ namespace dotnetthanks
 
         public Version Version { get; private set; }
         public string VersionLabel { get; private set; }
-        public List<string> ProcessedReleases { get; set; } = new List<string>();
+        public List<string> ProcessedReleases { get; set; } = [];
         public bool Equals(Release other)
         {
             if (other is null)
@@ -77,8 +77,7 @@ namespace dotnetthanks
 
         private void ParseVersion()
         {
-            const string pattern = "(v)?(?<version>\\d+.\\d+(.\\d+)?)(-(?<label>.*))?";
-            Match m = Regex.Match(_tag, pattern, RegexOptions.Compiled | RegexOptions.Singleline);
+            Match m = RegexHelper.VersionRegex().Match(_tag);
             if (!m.Success)
                 throw new ArgumentException($"Tag '{_tag}' has unexpected format");
 
@@ -95,7 +94,7 @@ namespace dotnetthanks
         public string Avatar { get; set; }
         public int Count { get; set; }
 
-        public List<RepoItem> Repos { get; set; } = new List<RepoItem>();
+        public List<RepoItem> Repos { get; set; } = [];
     }
 
     [DebuggerDisplay("Name = {Name}, Count = {Count}")]
@@ -118,7 +117,12 @@ namespace dotnetthanks
             get => "dotnet"; // this.Url?.Split("/")[3];
 
         }
+        public string Tag { get => Url?[(Url.LastIndexOf('/') + 1)..].Trim(); }
+    }
 
-        public string Tag { get => Url?.Substring(Url.LastIndexOf($"/") + 1).Trim(); }
+    public partial class RegexHelper
+    {
+        [GeneratedRegex("(v)?(?<version>\\d+.\\d+(.\\d+)?)(-(?<label>.*))?", RegexOptions.Compiled | RegexOptions.Singleline)]
+        public static partial Regex VersionRegex();
     }
 }
