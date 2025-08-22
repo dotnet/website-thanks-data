@@ -117,7 +117,7 @@ namespace dotnetthanks_loader
             get => "dotnet"; // this.Url?.Split("/")[3];
 
         }
-        public string Tag { get => Url?[(Url.LastIndexOf($"/") + 1)..].Trim(); }
+        public string Tag { get => Url?[(Url.LastIndexOf('/') + 1)..].Trim(); }
     }
 
     public partial class RegexHelper
