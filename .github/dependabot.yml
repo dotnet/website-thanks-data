@@ -7,11 +7,6 @@ updates:
     day: "wednesday"
   open-pull-requests-limit: 10
   groups:
-    microsoft-extensions:
-      patterns:
-        - "Microsoft.Extensions.*"
-    dependencies:
+    nuget-dependencies:
       patterns:
         - "*"
-      exclude-patterns:
-        - "Microsoft.Extensions.*"
