@@ -6,3 +6,7 @@ updates:
     interval: weekly
     day: "wednesday"
   open-pull-requests-limit: 10
+  groups:
+    nuget-dependencies:
+      patterns:
+        - "*"
