@@ -465,7 +465,7 @@ namespace dotnetthanks_loader
         private static async Task<List<dotnetthanks.MajorRelease>> LoadCurrentCoreJsonAsync()
         {
             _client = new HttpClient();
-            var url = "https://dotnetwebsitestorage.blob.core.windows.net/blob-assets/json/thanks/core.json";
+            var url = "https://dotnet.microsoft.com/blob-assets/json/thanks/core.json";
 
             try
             {
