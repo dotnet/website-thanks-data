@@ -1,4 +1,4 @@
-namespace dotnetthanks
+namespace dotnetthanks_loader
 {
     public class MajorRelease
     {
@@ -8,6 +8,6 @@ namespace dotnetthanks
         public string Product { get; set; }
         public Version Version { get; set; }
         public string Tag { get; set; }
-        public List<string> ProcessedReleases { get; set; } = new List<string>();
+        public List<string> ProcessedReleases { get; set; } = [];
     }
 }
