@@ -22,11 +22,6 @@ resources:
       type: git
       ref: main
       
-    - repository: dotnet-website
-      type: git
-      name: dotnet/website
-      ref: refs/heads/main
-      
     - repository: 1ESPipelineTemplates
       type: git
       name: 1ESPipelineTemplates/1ESPipelineTemplates
@@ -41,10 +36,6 @@ extends:
       os: windows
     customBuildTags:
       - ES365AIMigrationTooling
-    sdl:
-      sourceRepositoriesToScan:
-        include:
-          - repository: dotnetwebsite
     stages:
       - stage: thanks_data
         displayName: 'Generate Thanks Data Stage'
@@ -112,11 +103,16 @@ extends:
                       echo "##vso[task.complete result=Failed]"
                     fi
 
-              - checkout: dotnet-website
-                displayName: 'Checkout dotnet/website repository'
+              - task: Bash@3
+                displayName: 'Clone dotnet/website repository'
                 condition: eq(variables['HAS_CORE_JSON'], 'true')
-                persistCredentials: true
-                clean: true
+                env:
+                  GITHUB_TOKEN: $(GITHUB_TOKEN)
+                inputs:
+                  targetType: 'inline'
+                  script: |
+                    set -euo pipefail
+                    git clone https://$GITHUB_TOKEN@github.com/dotnet/website.git dotnet-website
 
               - task: Bash@3
                 displayName: 'Copy core.json to Website Repo'
@@ -128,7 +124,7 @@ extends:
                   script: |
                     set -euo pipefail
                     
-                    target_dir="website-resources/blob-assets/json/thanks"
+                    target_dir="dotnet-website/website-resources/blob-assets/json/thanks"
                     
                     echo "Source file: $CORE_JSON_PATH"
                     echo "Target directory: $target_dir"
@@ -155,6 +151,8 @@ extends:
                   targetType: 'inline'
                   script: |
                     set -euo pipefail
+                    
+                    cd dotnet-website
                     
                     # Configure git
                     git config --global user.email "bot@azuredevops.com"
