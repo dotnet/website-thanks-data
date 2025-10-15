@@ -14,9 +14,16 @@ schedules:
     always: true
 
 resources:
+  pipelines:
+    - pipeline: dotnetwebsite
+      source: 'dotnet-website-main'
   repositories:
     - repository: self
       type: git
+      ref: main
+    - repository: dotnetwebsite
+      type: git
+      name: dotnet/website
       ref: main
     - repository: 1ESPipelineTemplates
       type: git
@@ -42,22 +49,18 @@ extends:
             cancelTimeoutInMinutes: 5
             variables:
               HAS_CORE_JSON: 'false'
-            # 1ES Pipeline Template output configuration
-            templateContext:
-              outputs:
-              - output: pipelineArtifact
-                condition: eq(variables['HAS_CORE_JSON'], 'true')
-                displayName: 'Publish core.json artifact'
-                targetPath: '$(Build.SourcesDirectory)'
-                artifactName: 'thanks-data'
+              CORE_JSON_PATH: ''
+              BRANCH_NAME: ''
             steps:
               - checkout: self
-                clean: true 
+                clean: true
+
               - task: UseDotNet@2
                 displayName: Install .NET 9
                 inputs:
                   packageType: 'sdk'
                   version: '9.x'
+
               - task: Bash@3
                 displayName: 'Prepare .NET Thanks Data Tool'
                 env:
@@ -75,6 +78,7 @@ extends:
                     dotnet user-secrets set GITHUB_TOKEN "$GITHUB_TOKEN" 
                     dotnet restore
                     dotnet build --configuration Release
+              
               - task: Bash@3
                 displayName: 'Run .NET Thanks Data Tool'
                 env:
@@ -90,9 +94,120 @@ extends:
                       echo "Generated core.json"
                       echo "##vso[task.setvariable variable=HAS_CORE_JSON]true"
                       echo "##vso[task.complete result=Succeeded]"
+                      
+                      # Store the absolute path to core.json for later use
+                      core_json_path="$(pwd)/core.json"
+                      echo "##vso[task.setvariable variable=CORE_JSON_PATH]$core_json_path"
+                      echo "Core.json located at: $core_json_path"
 
                     else
                       echo "WARNING: core.json not generated, downstream tasks will be skipped."
                       echo "##vso[task.setvariable variable=HAS_CORE_JSON]false"
                       echo "##vso[task.complete result=Failed]"
                     fi
+
+              - checkout: dotnetwebsite
+                displayName: 'Checkout dotnet/website repository'
+                condition: eq(variables['HAS_CORE_JSON'], 'true')
+                persistCredentials: true
+                clean: true
+
+              - task: Bash@3
+                displayName: 'Copy core.json to Website Repo'
+                condition: eq(variables['HAS_CORE_JSON'], 'true')
+                env:
+                  CORE_JSON_PATH: $(CORE_JSON_PATH)
+                inputs:
+                  targetType: 'inline'
+                  script: |
+                    set -euo pipefail
+                    
+                    target_dir="website-resources/blob-assets/json/thanks"
+                    
+                    echo "Source file: $CORE_JSON_PATH"
+                    echo "Target directory: $target_dir"
+                    echo "Current working directory: $(pwd)"
+                    
+                    # Verify source file exists
+                    if [ ! -f "$CORE_JSON_PATH" ]; then
+                        echo "Source file not found: $CORE_JSON_PATH"
+                        exit 1
+                    fi
+                    
+                    # Create target directory and copy file
+                    mkdir -p "$target_dir"
+                    cp "$CORE_JSON_PATH" "$target_dir/core.json"
+                    echo "Successfully copied core.json to $target_dir/core.json"
+
+              - task: Bash@3
+                displayName: 'Commit and Push Updates'
+                condition: eq(variables['HAS_CORE_JSON'], 'true')
+                env:
+                  GITHUB_TOKEN: $(GITHUB_TOKEN)
+                  BUILD_ID: $(Build.BuildId)
+                inputs:
+                  targetType: 'inline'
+                  script: |
+                    set -euo pipefail
+                    
+                    # Configure git
+                    git config --global user.email "bot@azuredevops.com"
+                    git config --global user.name "azure-pipelines"
+                    git remote set-url origin "https://$GITHUB_TOKEN@github.com/dotnet/website.git"
+
+                    # Sync with remote
+                    git fetch origin main
+                    git checkout main
+                    git reset --hard origin/main
+
+                    # Create and switch to new branch
+                    branch="thanks-data-update-$BUILD_ID"
+                    git checkout -B "$branch"
+
+                    # Stage changes
+                    git add "website-resources/blob-assets/json/thanks/core.json"
+                    
+                    # Check if there are changes to commit
+                    if git diff --cached --quiet; then
+                        echo "No changes to commit"
+                        exit 0
+                    fi
+                    
+                    # Commit and push
+                    git commit -m "Update .NET thanks data"
+                    git push origin "HEAD:$branch"
+
+                    echo "##vso[task.setvariable variable=BRANCH_NAME]$branch"
+                    echo "Branch '$branch' created and pushed successfully"
+
+              - task: Bash@3
+                displayName: 'Create PR for .NET Thanks Data Update'
+                condition: eq(variables['HAS_CORE_JSON'], 'true')
+                env:
+                  GITHUB_TOKEN: $(GITHUB_TOKEN)
+                  BUILD_ID: $(Build.BuildId)
+                  BRANCH_NAME: $(BRANCH_NAME)
+                inputs:
+                  targetType: 'inline'
+                  script: |
+                    set -euo pipefail
+                    
+                    curr_month=$(date -u +%B)
+                    curr_year=$(date -u +%Y)
+                    pr_title="Update .NET thanks data - $curr_month $curr_year"
+                    pr_body="🔄 **Automated .NET Thanks Data Update**\n\nBuild ID: $BUILD_ID\n\nThis PR updates the core.json file with the latest contributor acknowledgments.\n\n---\n*This PR was automatically generated by the website-thanks-data pipeline.*"
+
+                    echo "Creating PR: $pr_title"
+                    echo "Branch: $BRANCH_NAME"
+                    
+                    curl -s -X POST \
+                      -H "Authorization: token $GITHUB_TOKEN" \
+                      -H "Accept: application/vnd.github.v3+json" \
+                      -H "Content-Type: application/json" \
+                      https://api.github.com/repos/dotnet/website/pulls \
+                      -d "{
+                        \"title\": \"$pr_title\",
+                        \"body\": \"$pr_body\",
+                        \"head\": \"$BRANCH_NAME\",
+                        \"base\": \"main\"
+                      }"
