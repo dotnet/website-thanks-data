@@ -1,5 +1,18 @@
+---
 trigger: none
+pr: none
+
 name: $(date:yyyyMMdd)$(rev:.r)
+
+# This pipeline runs on schedule to generate core.json data
+schedules:
+  - cron: "0 19 8-14 * Tue"
+    displayName: "Run second Tuesday each month at 19:00 UTC"
+    branches:
+      include:
+        - main
+    always: true
+
 resources:
   repositories:
     - repository: self
@@ -35,7 +48,7 @@ extends:
               - output: pipelineArtifact
                 condition: eq(variables['HAS_CORE_JSON'], 'true')
                 displayName: 'Publish core.json artifact'
-                targetPath: '$(Build.SourcesDirectory)/core.json'
+                targetPath: '$(Build.SourcesDirectory)'
                 artifactName: 'thanks-data'
             steps:
               - checkout: self
