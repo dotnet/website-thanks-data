@@ -21,6 +21,11 @@ resources:
     - repository: self
       type: git
       ref: main
+    - repository: dotnetwebsite
+      type: github
+      name: dotnet/website
+      endpoint: github
+      ref: main
     - repository: 1ESPipelineTemplates
       type: git
       name: 1ESPipelineTemplates/1ESPipelineTemplates
@@ -35,6 +40,10 @@ extends:
       os: windows
     customBuildTags:
       - ES365AIMigrationTooling
+    sdl:
+      sourceRepositoriesToScan:
+        include:
+          - repository: dotnetwebsite
     stages:
       - stage: thanks_data
         displayName: 'Generate Thanks Data Stage'
