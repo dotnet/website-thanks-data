@@ -22,8 +22,8 @@ resources:
       type: git
       ref: main
     - repository: dotnetwebsite
-      type: git
-      name: dotnet/website
+      type: github
+      name: dotnet/website 
       ref: main
     - repository: 1ESPipelineTemplates
       type: git
