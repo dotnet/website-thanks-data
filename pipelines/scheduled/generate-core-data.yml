@@ -22,7 +22,7 @@ extends:
     stages:
       - stage: thanks_data
         displayName: 'Generate Thanks Data Stage'
-        jobs:
+        jobs:  
           - job: ProcessThanksData
             displayName: 'Generate .NET Thanks Data'
             timeoutInMinutes: 1440
@@ -37,7 +37,7 @@ extends:
                 inputs:
                   packageType: 'sdk'
                   version: '9.x'
-              - task: Bash@3
+              - task: PowerShell@2
                 displayName: 'Prepare .NET Thanks Data Tool'
                 env:
                   GITHUB_CLIENTID: $(github.clientId)
@@ -46,30 +46,67 @@ extends:
                 inputs:
                   targetType: 'inline'
                   script: |
-                    set -euo pipefail 
+                    $ErrorActionPreference = "Stop"
 
-                    dotnet user-secrets init
-                    dotnet user-secrets set GITHUB_CLIENTID "$GITHUB_CLIENTID"
-                    dotnet user-secrets set GITHUB_CLIENTSECRET "$GITHUB_CLIENTSECRET"
-                    dotnet user-secrets set GITHUB_TOKEN "$GITHUB_TOKEN"
+                    Write-Host "Setting up user secrets..."
+                    
+                    # Check if user secrets are already initialized
+                    try {
+                        dotnet user-secrets list | Out-Null
+                        Write-Host "User secrets already initialized"
+                    }
+                    catch {
+                        Write-Host "Initializing user secrets..."
+                        dotnet user-secrets init
+                    }
+                    
+                    Write-Host "Setting GitHub credentials..."
+                    dotnet user-secrets set GITHUB_CLIENTID "$env:GITHUB_CLIENTID"
+                    dotnet user-secrets set GITHUB_CLIENTSECRET "$env:GITHUB_CLIENTSECRET"
+                    dotnet user-secrets set GITHUB_TOKEN "$env:GITHUB_TOKEN"
+                    
+                    Write-Host "Current user secrets:"
                     dotnet user-secrets list
+                    
+                    Write-Host "Restoring and building project..."
                     dotnet restore
                     dotnet build --configuration Release
-              - task: Bash@3
+              - task: PowerShell@2
                 displayName: 'Run .NET Thanks Data Tool'
                 env:
                   GITHUB_TOKEN: $(github.oauthToken)
                 inputs:
                   targetType: 'inline'
                   script: |
-                    set -euo pipefail 
-
-                    timeout 86400 dotnet run --project dotnetthanks-loader.csproj --configuration Release diff
- 
-                    if [ -f "core.json" ]; then
-                      echo "Generated core.json"
-                      echo "##vso[task.setvariable variable=HAS_CORE_JSON]true"
-                    else
-                      echo "##vso[task.setvariable variable=HAS_CORE_JSON]false"
-                      echo "WARNING: core.json not generated, downstream tasks will be skipped."
-                    fi
+                    $ErrorActionPreference = "Stop"
+                    
+                    Write-Host "Starting .NET Thanks Data Tool..."
+                    
+                    # Start the process with timeout (24 hours = 86400 seconds)
+                    $process = Start-Process -FilePath "dotnet" -ArgumentList "run", "--project", "dotnetthanks-loader.csproj", "--configuration", "Release", "diff" -PassThru -NoNewWindow
+                    
+                    # Wait for 24 hours (86400000 milliseconds)
+                    $finished = $process.WaitForExit(86400000)
+                    
+                    if (-not $finished) {
+                        Write-Host "Process timed out after 24 hours, terminating..."
+                        $process.Kill()
+                        $process.WaitForExit()
+                        throw "Process timed out after 24 hours"
+                    }
+                    
+                    $exitCode = $process.ExitCode
+                    Write-Host "Process completed with exit code: $exitCode"
+                    
+                    if ($exitCode -ne 0) {
+                        throw "dotnet run failed with exit code $exitCode"
+                    }
+                    
+                    # Check if core.json was generated
+                    if (Test-Path "core.json") {
+                        Write-Host "Generated core.json successfully"
+                        Write-Host "##vso[task.setvariable variable=HAS_CORE_JSON]true"
+                    } else {
+                        Write-Host "##vso[task.setvariable variable=HAS_CORE_JSON]false"
+                        Write-Host "WARNING: core.json not generated, downstream tasks will be skipped."
+                    }
