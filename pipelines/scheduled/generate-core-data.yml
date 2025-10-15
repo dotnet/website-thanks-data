@@ -115,38 +115,12 @@ extends:
                     git clone https://$GITHUB_TOKEN@github.com/dotnet/website.git dotnet-website
 
               - task: Bash@3
-                displayName: 'Copy core.json to Website Repo'
-                condition: eq(variables['HAS_CORE_JSON'], 'true')
-                env:
-                  CORE_JSON_PATH: $(CORE_JSON_PATH)
-                inputs:
-                  targetType: 'inline'
-                  script: |
-                    set -euo pipefail
-                    
-                    target_dir="dotnet-website/website-resources/blob-assets/json/thanks"
-                    
-                    echo "Source file: $CORE_JSON_PATH"
-                    echo "Target directory: $target_dir"
-                    echo "Current working directory: $(pwd)"
-                    
-                    # Verify source file exists
-                    if [ ! -f "$CORE_JSON_PATH" ]; then
-                        echo "Source file not found: $CORE_JSON_PATH"
-                        exit 1
-                    fi
-                    
-                    # Create target directory and copy file
-                    mkdir -p "$target_dir"
-                    cp "$CORE_JSON_PATH" "$target_dir/core.json"
-                    echo "Successfully copied core.json to $target_dir/core.json"
-
-              - task: Bash@3
-                displayName: 'Commit and Push Updates'
+                displayName: 'Update Website Repository with New Thanks Data'
                 condition: eq(variables['HAS_CORE_JSON'], 'true')
                 env:
                   GITHUB_TOKEN: $(GITHUB_TOKEN)
                   BUILD_ID: $(Build.BuildId)
+                  CORE_JSON_PATH: $(CORE_JSON_PATH)
                 inputs:
                   targetType: 'inline'
                   script: |
@@ -168,8 +142,30 @@ extends:
                     branch="thanks-data-update-$BUILD_ID"
                     git checkout -B "$branch"
 
+                    # Copy the updated core.json file AFTER git reset
+                    target_dir="website-resources/blob-assets/json/thanks"
+                    echo "Source file: $CORE_JSON_PATH"
+                    echo "Target directory: $target_dir"
+                    
+                    # Verify source file exists
+                    if [ ! -f "$CORE_JSON_PATH" ]; then
+                        echo "Source file not found: $CORE_JSON_PATH"
+                        exit 1
+                    fi
+                    
+                    # Create target directory and copy file
+                    mkdir -p "$target_dir"
+                    cp "$CORE_JSON_PATH" "$target_dir/core.json"
+                    echo "Successfully copied core.json to $target_dir/core.json"
+
                     # Stage changes
                     git add "website-resources/blob-assets/json/thanks/core.json"
+                    
+                    # Check if there are changes to commit
+                    if git diff --cached --quiet; then
+                        echo "No changes to commit"
+                        exit 0
+                    fi
                     
                     # Commit and push
                     git commit -m "Update .NET thanks data"
