@@ -22,12 +22,11 @@ resources:
       type: git
       ref: main
       
-    - repository: dotnetwebsite
-      type: github
+    - repository: dotnet-website
+      type: git
       name: dotnet/website
       ref: refs/heads/main
-      endpoint: dotnet
-
+      
     - repository: 1ESPipelineTemplates
       type: git
       name: 1ESPipelineTemplates/1ESPipelineTemplates
@@ -113,7 +112,7 @@ extends:
                       echo "##vso[task.complete result=Failed]"
                     fi
 
-              - checkout: dotnetwebsite
+              - checkout: dotnet-website
                 displayName: 'Checkout dotnet/website repository'
                 condition: eq(variables['HAS_CORE_JSON'], 'true')
                 persistCredentials: true
