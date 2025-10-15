@@ -67,8 +67,9 @@ extends:
  
                     if [ -f "core.json" ]; then
                       echo "Generated core.json"
-                      echo "##vso[task.setvariable variable=HAS_CORE_JSON]true"
+                      echo "##vso[task.complete result=Succeeded]"
+
                     else
-                      echo "##vso[task.setvariable variable=HAS_CORE_JSON]false"
                       echo "WARNING: core.json not generated, downstream tasks will be skipped."
+                      echo "##vso[task.complete result=Failed]"
                     fi
