@@ -1,0 +1,74 @@
+trigger: none
+name: $(date:yyyyMMdd)$(rev:.r)
+resources:
+  repositories:
+    - repository: self
+      type: git
+      ref: main
+    - repository: 1ESPipelineTemplates
+      type: git
+      name: 1ESPipelineTemplates/1ESPipelineTemplates
+      ref: refs/tags/release 
+
+extends:
+  template: v1/1ES.Official.PipelineTemplate.yml@1ESPipelineTemplates
+  parameters:
+    pool:
+      name: AzurePipelines-EO
+      image: 1ESPT-Windows2022
+      os: windows
+    customBuildTags:
+      - ES365AIMigrationTooling
+    stages:
+      - stage: thanks_data
+        displayName: 'Generate Thanks Data Stage'
+        jobs:
+          - job: ProcessThanksData
+            displayName: 'Generate .NET Thanks Data'
+            timeoutInMinutes: 1440
+            cancelTimeoutInMinutes: 5
+            variables:
+              HAS_CORE_JSON: 'false'
+            steps:
+              - checkout: self
+                clean: true 
+              - task: UseDotNet@2
+                displayName: Install .NET 9
+                inputs:
+                  packageType: 'sdk'
+                  version: '9.x'
+              - task: Bash@3
+                displayName: 'Prepare .NET Thanks Data Tool'
+                env:
+                  GITHUB_CLIENTID: $(github.clientId)
+                  GITHUB_CLIENTSECRET: $(github.clientSecret)
+                  GITHUB_TOKEN: $(github.oauthToken)
+                inputs:
+                  targetType: 'inline'
+                  script: |
+                    set -euo pipefail 
+
+                    dotnet user-secrets init
+                    dotnet user-secrets set GITHUB_CLIENTID "$GITHUB_CLIENTID"
+                    dotnet user-secrets set GITHUB_CLIENTSECRET "$GITHUB_CLIENTSECRET"
+                    dotnet user-secrets set GITHUB_TOKEN "$GITHUB_TOKEN"
+                    dotnet restore
+                    dotnet build --configuration Release
+              - task: Bash@3
+                displayName: 'Run .NET Thanks Data Tool'
+                env:
+                  GITHUB_TOKEN: $(github.oauthToken)
+                inputs:
+                  targetType: 'inline'
+                  script: |
+                    set -euo pipefail 
+
+                    timeout 86400 dotnet run --project dotnetthanks-loader.csproj --configuration Release diff
+ 
+                    if [ -f "core.json" ]; then
+                      echo "Generated core.json"
+                      echo "##vso[task.setvariable variable=HAS_CORE_JSON]true"
+                    else
+                      echo "##vso[task.setvariable variable=HAS_CORE_JSON]false"
+                      echo "WARNING: core.json not generated, downstream tasks will be skipped."
+                    fi
