@@ -52,6 +52,7 @@ extends:
                     dotnet user-secrets set GITHUB_CLIENTID "$GITHUB_CLIENTID"
                     dotnet user-secrets set GITHUB_CLIENTSECRET "$GITHUB_CLIENTSECRET"
                     dotnet user-secrets set GITHUB_TOKEN "$GITHUB_TOKEN"
+                    dotnet users-secrets list
                     dotnet restore
                     dotnet build --configuration Release
               - task: Bash@3
