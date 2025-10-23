@@ -100,7 +100,6 @@ extends:
                     else
                       echo "WARNING: core.json not generated, downstream tasks will be skipped."
                       echo "##vso[task.setvariable variable=HAS_CORE_JSON]false"
-                      echo "##vso[task.complete result=Failed]"
                     fi
 
               - task: Bash@3
