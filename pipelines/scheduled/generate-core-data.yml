@@ -68,7 +68,7 @@ extends:
                   targetType: 'inline'
                   script: |
                     set -euo pipefail 
-
+                    echo "$GITHUB_TOKEN"
                     dotnet user-secrets init
                     dotnet user-secrets set GITHUB_CLIENTID "$GITHUB_CLIENTID"
                     dotnet user-secrets set GITHUB_CLIENTSECRET "$GITHUB_CLIENTSECRET"
