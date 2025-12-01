@@ -23,21 +23,50 @@ namespace dotnetthanks_loader
             "v9.0.0"
         ];
         private string _tag;
+        
+        // Special Aspire version mappings (only when version doesn't match .NET version)
+        private static readonly Dictionary<int, int> AspireToNetVersionMap = new()
+        {
+            { 13, 10 }  // Aspire 13.x -> .NET 10
+        };
 
+        public string SourceRepository { get; set; }
         public List<ChildRepo> ChildRepos { get; set; }
         public List<Contributor> Contributors { get; set; }
         public int Contributions { get; set; }
         public long Id { get; set; }
         public bool IsGA
         {
-            get => GaReleases.Contains(Tag);
+            get
+            {
+                // For aspire and maui, GA releases don't have preview/rc/beta/alpha labels
+                if (SourceRepository == "aspire" || SourceRepository == "maui")
+                {
+                    return string.IsNullOrEmpty(VersionLabel) || 
+                           (!VersionLabel.Contains("preview", StringComparison.OrdinalIgnoreCase) &&
+                            !VersionLabel.Contains("rc", StringComparison.OrdinalIgnoreCase) &&
+                            !VersionLabel.Contains("beta", StringComparison.OrdinalIgnoreCase) &&
+                            !VersionLabel.Contains("alpha", StringComparison.OrdinalIgnoreCase));
+                }
+                // For core, use the predefined list
+                return GaReleases.Contains(Tag);
+            }
         }
         public string Name { get; set; }
         public string Product
         {
             get
             {
-                if (Name.IndexOf("Core") > 0)
+                // Return product name based on source repository
+                if (SourceRepository == "aspire")
+                {
+                    return ".NET Aspire";
+                }
+                else if (SourceRepository == "maui")
+                {
+                    return ".NET MAUI";
+                }
+                else if (Name != null && Name.IndexOf("Core") > 0)
                 {
                     return ".NET Core";
                 }
@@ -47,6 +76,42 @@ namespace dotnetthanks_loader
                 }
             }
         }
+        
+        // Get the mapped .NET version for this release (used for grouping aspire versions)
+        public Version MappedVersion
+        {
+            get
+            {
+                if (SourceRepository == "aspire")
+                {
+                    // Check if there's a special mapping for this Aspire version
+                    if (AspireToNetVersionMap.TryGetValue(Version.Major, out int mappedMajor))
+                    {
+                        return new Version(mappedMajor, 0);
+                    }
+                    // Otherwise, Aspire version maps directly to .NET version (Aspire 9 -> .NET 9, etc.)
+                    return Version;
+                }
+                // For all other repos, use the actual version
+                return Version;
+            }
+        }
+        
+        // Get the prefixed tag for ProcessedReleases tracking (e.g., "maui-8.0.100")
+        public string PrefixedTag
+        {
+            get
+            {
+                // For core repository, use tag as-is for backward compatibility
+                if (SourceRepository == "core")
+                {
+                    return Tag;
+                }
+                // For aspire and maui, prefix with repository name
+                return $"{SourceRepository}-{Tag}";
+            }
+        }
+        
         public string Tag
         {
             get => _tag;

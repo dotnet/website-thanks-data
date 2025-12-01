@@ -41,11 +41,20 @@ namespace dotnetthanks_loader
             var basic = new Credentials(config.GetSection("GITHUB_CLIENTID").Value, config.GetSection("GITHUB_CLIENTSECRET").Value);
             _ghclient.Credentials = basic;
 
-            var repo = "core";
             var owner = "dotnet";
+            var repositories = new[] { "core", "maui", "aspire" };
 
-            // load all releases for dotnet/core
-            IEnumerable<Release> allReleases = await LoadReleasesAsync(owner, repo);
+            // Load all releases from all repositories and combine them
+            var allReleasesList = new List<Release>();
+            foreach (var repository in repositories)
+            {
+                Console.WriteLine($"Loading releases from {owner}/{repository}...");
+                var releases = await LoadReleasesAsync(owner, repository);
+                allReleasesList.AddRange(releases);
+            }
+            
+            IEnumerable<Release> allReleases = allReleasesList;
+            var repo = "core"; // Output filename will be core.json
 
             // Sort releases from the yongest to the oldest by version
             // E.g.
@@ -92,21 +101,26 @@ namespace dotnetthanks_loader
                     processedReleases.AddRange(o.ProcessedReleases);
                 }
 
-                List<Release> diff = [..sortedReleases.Where(o => !processedReleases.Contains(o.Tag))];
+                List<Release> diff = [..sortedReleases.Where(o => !processedReleases.Contains(o.PrefixedTag))];
 
                 // Check if releases in diff are not in dictionary
                 foreach (var release in diff)
                 {
-                    if (!sortedMajorReleasesDictionary.ContainsKey($"{release.Version.Major}.{release.Version.Minor}"))
+                    var mappedVersion = release.MappedVersion;
+                    var key = $"{mappedVersion.Major}.{mappedVersion.Minor}";
+                    
+                    if (!sortedMajorReleasesDictionary.ContainsKey(key))
                     {
-                        sortedMajorReleasesDictionary.Add($"{release.Version.Major}.{release.Version.Minor}", new MajorRelease
+                        // Use .NET version for the name when grouping aspire/maui under .NET versions
+                        var productName = release.SourceRepository == "aspire" || release.SourceRepository == "maui" ? ".NET" : release.Product;
+                        sortedMajorReleasesDictionary.Add(key, new MajorRelease
                         {
                             Contributions = 0,
                             Contributors = [],
-                            Product = release.Product,
-                            Name = $"{release.Product} {release.Version.Major}.{release.Version.Minor}",
-                            Version = release.Version,
-                            Tag = $"v{release.Version.Major}.{release.Version.Minor}",
+                            Product = productName,
+                            Name = $"{productName} {mappedVersion.Major}.{mappedVersion.Minor}",
+                            Version = mappedVersion,
+                            Tag = $"v{mappedVersion.Major}.{mappedVersion.Minor}",
                             ProcessedReleases = []
                         });
                     }
@@ -169,19 +183,24 @@ namespace dotnetthanks_loader
                 // create a dictionary for major versions
                 foreach (var release in sortedReleases)
                 {
-                    if (!sortedMajorReleasesDictionary.ContainsKey($"{release.Version.Major}.{release.Version.Minor}"))
+                    var mappedVersion = release.MappedVersion;
+                    var key = $"{mappedVersion.Major}.{mappedVersion.Minor}";
+                    
+                    if (!sortedMajorReleasesDictionary.ContainsKey(key))
                     {
+                        // Use .NET version for the name when grouping aspire/maui under .NET versions
+                        var productName = release.SourceRepository == "aspire" || release.SourceRepository == "maui" ? ".NET" : release.Product;
                         var majorRelease = new MajorRelease
                         {
                             Contributions = 0,
                             Contributors = [],
-                            Product = release.Product,
-                            Name = $"{release.Product} {release.Version.Major}.{release.Version.Minor}",
-                            Version = release.Version,
-                            Tag = $"v{release.Version.Major}.{release.Version.Minor}",
+                            Product = productName,
+                            Name = $"{productName} {mappedVersion.Major}.{mappedVersion.Minor}",
+                            Version = mappedVersion,
+                            Tag = $"v{mappedVersion.Major}.{mappedVersion.Minor}",
                             ProcessedReleases = []
                         };
-                        sortedMajorReleasesDictionary.Add($"{release.Version.Major}.{release.Version.Minor}", majorRelease);
+                        sortedMajorReleasesDictionary.Add(key, majorRelease);
                     }
                 }
 
@@ -204,14 +223,15 @@ namespace dotnetthanks_loader
             for (int i = 0; i < releases.Count; i++)
             {
                 currentRelease = releases[i];
-                majorReleasesDict.TryGetValue($"{currentRelease.Version.Major}.{currentRelease.Version.Minor}", out var majorRelease);
+                var mappedVersion = currentRelease.MappedVersion;
+                majorReleasesDict.TryGetValue($"{mappedVersion.Major}.{mappedVersion.Minor}", out var majorRelease);
 
                 // Add the first release to the list of processed releases so diff does not pick it up
                 if (i == releases.Count - 1)
                 {
                     if (!isDiff)
                     {
-                        majorRelease?.ProcessedReleases.Add(currentRelease.Tag);
+                        majorRelease?.ProcessedReleases.Add(currentRelease.PrefixedTag);
                     }
                     break;
                 }
@@ -226,11 +246,40 @@ namespace dotnetthanks_loader
                     continue;
                 }
 
-                majorRelease?.ProcessedReleases.Add(currentRelease.Tag);
+                majorRelease?.ProcessedReleases.Add(currentRelease.PrefixedTag);
 
                 Console.WriteLine($"Processing:[{i}] {repo} {previousRelease.Tag}..{currentRelease.Tag}");
 
-                // for each child repo get commits and count contribs
+                // For aspire and maui, process the main repository directly since they don't have child repos
+                if (currentRelease.SourceRepository == "aspire" || currentRelease.SourceRepository == "maui")
+                {
+                    try
+                    {
+                        Console.WriteLine($"\tProcessing main repository: {currentRelease.SourceRepository}: {previousRelease.Tag}..{currentRelease.Tag}");
+
+                        if (previousRelease.Tag != currentRelease.Tag)
+                        {
+                            var releaseDiff = await LoadCommitsForReleasesAsync(previousRelease.Tag,
+                                                                                currentRelease.Tag,
+                                                                                "dotnet",
+                                                                                currentRelease.SourceRepository);
+                            if (releaseDiff is not null && releaseDiff.Count > 0)
+                            {
+                                if (majorRelease is not null)
+                                {
+                                    majorRelease.Contributions += releaseDiff.Count;
+                                    TallyCommits(majorRelease, currentRelease.SourceRepository, releaseDiff);
+                                }
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine(ex.Message);
+                    }
+                }
+
+                // for each child repo get commits and count contribs (for core releases)
                 foreach (var repoCurrentRelease in currentRelease.ChildRepos)
                 {
                     var repoPrevRelease = previousRelease.ChildRepos.FirstOrDefault(r => r.Owner == repoCurrentRelease.Owner &&
@@ -378,6 +427,7 @@ namespace dotnetthanks_loader
                 Name = release.Name,
                 Tag = release.TagName,
                 Id = release.Id,
+                SourceRepository = repo,
                 ChildRepos = ParseReleaseBody(release.Body),
                 Contributors = []
             });
