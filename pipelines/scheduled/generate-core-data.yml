@@ -53,10 +53,10 @@ extends:
                 clean: true
 
               - task: UseDotNet@2
-                displayName: Install .NET 9
+                displayName: Install .NET 10
                 inputs:
                   packageType: 'sdk'
-                  version: '9.x'
+                  version: '10.x'
 
               - task: Bash@3
                 displayName: 'Prepare .NET Thanks Data Tool'
