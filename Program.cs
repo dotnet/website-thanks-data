@@ -45,7 +45,16 @@ namespace dotnetthanks_loader
             var owner = "dotnet";
 
             // load all releases for dotnet/core
-            IEnumerable<Release> allReleases = await LoadReleasesAsync(owner, repo);
+            IEnumerable<Release> allReleases = (await LoadReleasesAsync(owner, repo));
+
+            // Load Aspire and MAUI releases
+            Console.WriteLine("Loading Aspire releases...");
+            var aspireReleases = await LoadReleasesAsync("dotnet", "aspire");
+            Console.WriteLine($"Loaded {aspireReleases.Count()} Aspire releases");
+
+            Console.WriteLine("Loading MAUI releases...");
+            var mauiReleases = await LoadReleasesAsync("dotnet", "maui");
+            Console.WriteLine($"Loaded {mauiReleases.Count()} MAUI releases");
 
             // Sort releases from the yongest to the oldest by version
             // E.g.
@@ -64,6 +73,16 @@ namespace dotnetthanks_loader
             //      ...
             //
             List<Release> sortedReleases = [..allReleases
+                .OrderByDescending(o => o.Version)
+                .ThenByDescending(o => o.Id)];
+
+            // Process Aspire releases and map to .NET versions
+            List<Release> sortedAspireReleases = [..aspireReleases
+                .OrderByDescending(o => o.Version)
+                .ThenByDescending(o => o.Id)];
+
+            // Process MAUI releases
+            List<Release> sortedMauiReleases = [..mauiReleases
                 .OrderByDescending(o => o.Version)
                 .ThenByDescending(o => o.Id)];
 
@@ -189,6 +208,14 @@ namespace dotnetthanks_loader
 
                 await ProcessReleases(sortedReleases, sortedMajorReleasesDictionary, repo);
 
+                // Process Aspire releases
+                Console.WriteLine($"\nProcessing Aspire releases... - {sortedAspireReleases.Count}");
+                await ProcessAspireReleases(sortedAspireReleases, sortedMajorReleasesDictionary);
+
+                // Process MAUI releases
+                Console.WriteLine($"\nProcessing MAUI releases... - {sortedMauiReleases.Count}");
+                await ProcessMauiReleases(sortedMauiReleases, sortedMajorReleasesDictionary);
+
                 sortedMajorReleasesList = [.. sortedMajorReleasesDictionary.Values];
 
                 File.WriteAllText($"./{repo}.json", JsonSerializer.Serialize(sortedMajorReleasesList));
@@ -276,6 +303,157 @@ namespace dotnetthanks_loader
                 if (Environment.GetEnvironmentVariable("TEST") == "1")
                     break;
             }
+        }
+
+        private static async Task ProcessAspireReleases(List<Release> aspireReleases, Dictionary<string, MajorRelease> majorReleasesDict)
+        {
+            Release currentRelease;
+            Release previousRelease;
+            
+            for (int i = 0; i < aspireReleases.Count; i++)
+            {
+                currentRelease = aspireReleases[i];
+                
+                // Map Aspire version to .NET version
+                int dotnetMajor = MapAspireVersionToDotNet(currentRelease.Tag);
+
+                // Get the .NET major release to add contributors to
+                majorReleasesDict.TryGetValue($"{dotnetMajor}.{0}", out var majorRelease);
+                if (majorRelease == null)
+                {
+                    Console.WriteLine($"[ERROR]: .NET {dotnetMajor}.0 not found in dictionary for Aspire {currentRelease.Tag}");
+                    continue;
+                }
+
+                // Skip if this is the last release (no previous to compare against)
+                if (i == aspireReleases.Count - 1)
+                {
+                    break;
+                }
+
+                previousRelease = aspireReleases[i + 1];
+
+                // Add to processed releases with aspire- prefix
+                string aspireReleaseTag = $"aspire-{currentRelease.Tag}";
+                majorRelease.ProcessedReleases.Add(aspireReleaseTag);
+
+                Console.WriteLine($"Processing: aspire {previousRelease.Tag}..{currentRelease.Tag} -> .NET {dotnetMajor}.0");
+
+                try
+                {
+                    var releaseDiff = await LoadCommitsForReleasesAsync(previousRelease.Tag,
+                                                                        currentRelease.Tag,
+                                                                        "dotnet",
+                                                                        "aspire");
+                    if (releaseDiff is null || releaseDiff.Count < 1)
+                    {
+                        continue;
+                    }
+
+                    majorRelease.Contributions += releaseDiff.Count;
+                    TallyCommits(majorRelease, "aspire", releaseDiff);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[ERROR]: {ex.Message}");
+                }
+            }
+        }
+
+        private static async Task ProcessMauiReleases(List<Release> mauiReleases, Dictionary<string, MajorRelease> majorReleasesDict)
+        {
+            Release currentRelease;
+            Release previousRelease;
+            
+            for (int i = 0; i < mauiReleases.Count; i++)
+            {
+                currentRelease = mauiReleases[i];
+                
+                // Map MAUI version to .NET version
+                int dotnetMajor = MapMauiVersionToDotNet(currentRelease.Tag);
+                if (dotnetMajor == -1)
+                {
+                    Console.WriteLine($"[SKIP]: MAUI {currentRelease.Tag} does not map to .NET 8, 9, or 10");
+                    continue;
+                }
+
+                // Get the .NET major release to add contributors to
+                majorReleasesDict.TryGetValue($"{dotnetMajor}.{0}", out var majorRelease);
+                if (majorRelease == null)
+                {
+                    Console.WriteLine($"[ERROR]: .NET {dotnetMajor}.0 not found in dictionary for MAUI {currentRelease.Tag}");
+                    continue;
+                }
+
+                // Skip if this is the last release (no previous to compare against)
+                if (i == mauiReleases.Count - 1)
+                {
+                    break;
+                }
+
+                previousRelease = mauiReleases[i + 1];
+
+                // Add to processed releases with maui- prefix
+                string mauiReleaseTag = $"maui-{currentRelease.Tag}";
+                majorRelease.ProcessedReleases.Add(mauiReleaseTag);
+
+                Console.WriteLine($"Processing: maui {previousRelease.Tag}..{currentRelease.Tag} -> .NET {dotnetMajor}.0");
+
+                try
+                {
+                    var releaseDiff = await LoadCommitsForReleasesAsync(previousRelease.Tag,
+                                                                        currentRelease.Tag,
+                                                                        "dotnet",
+                                                                        "maui");
+                    if (releaseDiff is null || releaseDiff.Count < 1)
+                    {
+                        continue;
+                    }
+
+                    majorRelease.Contributions += releaseDiff.Count;
+                    TallyCommits(majorRelease, "maui", releaseDiff);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[ERROR]: {ex.Message}");
+                }
+            }
+        }
+
+        private static int MapAspireVersionToDotNet(string aspireTag)
+        {
+            // Extract version from tag (v13.0.0 or just 13.0.0)
+            var versionStr = aspireTag.TrimStart('v');
+            var match = Regex.Match(versionStr, @"^(\d+)\.(\d+)");
+            if (!match.Success) return -1;
+
+            var major = int.Parse(match.Groups[1].Value);
+            
+            // Aspire 13.x -> .NET 10
+            if (major == 13) return 10;
+            // Aspire 10-12 -> .NET 10
+            if (major >= 10 && major <= 12) return 10;
+            // Aspire 9.x -> .NET 9
+            if (major == 9) return 9;
+            // Aspire 8.x -> .NET 8
+            if (major == 8) return 8;
+
+            return -1;
+        }
+
+        private static int MapMauiVersionToDotNet(string mauiTag)
+        {
+            // Extract version from tag (v10.0.0 or just 10.0.0)
+            var versionStr = mauiTag.TrimStart('v');
+            var match = Regex.Match(versionStr, @"^(\d+)\.(\d+)");
+            if (!match.Success) return -1;
+
+            var major = int.Parse(match.Groups[1].Value);
+            
+            // MAUI follows .NET versioning: MAUI 10.x -> .NET 10, etc.
+            if (major >= 8 && major <= 10) return major;
+
+            return -1;
         }
 #nullable disable
 
