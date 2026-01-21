@@ -56,7 +56,7 @@ namespace dotnetthanks_loader
             var mauiReleases = await LoadReleasesAsync("dotnet", "maui");
             Console.WriteLine($"Loaded {mauiReleases.Count()} MAUI releases");
 
-            // Sort releases from the yongest to the oldest by version
+            // Sort releases from the youngest to the oldest by version
             // E.g.
             //      5.0.1
             //      5.0.0       // GA
