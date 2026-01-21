@@ -70,31 +70,25 @@ extends:
                   script: |
                     set +e  # Don't exit on error
                     
-                    echo "$GITHUB_TOKEN"
-                    dotnet user-secrets init
-                    if [ $? -ne 0 ]; then
-                      echo "WARNING: Failed to initialize user secrets"
+                    handle_failure() {
+                      echo "WARNING: $1"
                       echo "##vso[task.setvariable variable=PREPARATION_SUCCEEDED]false"
                       exit 0
-                    fi
+                    }
+
+                    echo "$GITHUB_TOKEN"
+                    dotnet user-secrets init
+                    [ $? -ne 0 ] && handle_failure "Failed to initialize user secrets"
                     
                     dotnet user-secrets set GITHUB_CLIENTID "$GITHUB_CLIENTID"
                     dotnet user-secrets set GITHUB_CLIENTSECRET "$GITHUB_CLIENTSECRET"
                     dotnet user-secrets set GITHUB_TOKEN "$GITHUB_TOKEN"
                     
                     dotnet restore
-                    if [ $? -ne 0 ]; then
-                      echo "WARNING: Failed to restore packages"
-                      echo "##vso[task.setvariable variable=PREPARATION_SUCCEEDED]false"
-                      exit 0
-                    fi
+                    [ $? -ne 0 ] && handle_failure "Failed to restore packages"
                     
                     dotnet build --configuration Release
-                    if [ $? -ne 0 ]; then
-                      echo "WARNING: Build failed"
-                      echo "##vso[task.setvariable variable=PREPARATION_SUCCEEDED]false"
-                      exit 0
-                    fi
+                    [ $? -ne 0 ] && handle_failure "Build failed"
                     
                     echo "Preparation completed successfully"
                     echo "##vso[task.setvariable variable=PREPARATION_SUCCEEDED]true"
