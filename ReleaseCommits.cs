@@ -137,7 +137,7 @@ public class MergeBaseCommit
 {
     public string sha { get; set; }
     public string node_id { get; set; }
-    public Commit2 commit { get; set; }
+    public Commit commit { get; set; }
     public string url { get; set; }
     public string html_url { get; set; }
     public string comments_url { get; set; }
