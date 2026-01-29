@@ -10,19 +10,6 @@ namespace dotnetthanks_loader
     class Program
     {
         private static HttpClient _client;
-        private static readonly string[] exclusions =
-        [
-            "dependabot[bot]",
-            "github-actions[bot]",
-            "msftbot[bot]",
-            "github-actions[bot]",
-            "dotnet bot",
-            "dotnet-bot",
-            "nuget team bot",
-            "net source-build bot",
-            "dotnet-maestro-bot",
-            "dotnet-maestro[bot]"
-        ];
         private static string _token;
 
         private static GitHubClient _ghclient;
@@ -586,7 +573,7 @@ namespace dotnetthanks_loader
                     if (string.IsNullOrEmpty(author.name))
                         author.name = "Unknown";
 
-                    if (!exclusions.Contains(author.name.ToLower()))
+                    if (!BotExclusionConstants.IsBot(author.name))
                     {
                         // find if the author has been counted
                         var person = majorRelease.Contributors.Find(p => p.Link == author.html_url);
