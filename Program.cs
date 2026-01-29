@@ -572,34 +572,22 @@ namespace dotnetthanks_loader
                             };
                             person.Repos.Add(new RepoItem() { Name = repoName, Count = 1 });
 
-                    // find if the author has been counted
-                    var person = majorRelease.Contributors.Find(p => p.Link == author.html_url);
-                    if (person == null)
-                    {
-                        person = new Contributor()
-                        {
-                            Name = author.name,
-                            Link = author.html_url,
-                            Avatar = author.avatar_url,
-                            Count = 1
-                        };
-                        person.Repos.Add(new RepoItem() { Name = repoName, Count = 1 });
-
-                        majorRelease.Contributors.Add(person);
-                    }
-                    else
-                    {
-                        // found the author, does the repo exist as well?
-                        person.Count += 1;
-
-                        var repoItem = person.Repos.Find(r => r.Name == repoName);
-                        if (repoItem == null)
-                        {
-                            person.Repos.Add(new RepoItem() { Name = repoName, Count = 1 });
+                            majorRelease.Contributors.Add(person);
                         }
                         else
                         {
-                            repoItem.Count += 1;
+                            // found the author, does the repo exist as well?
+                            person.Count += 1;
+
+                            var repoItem = person.Repos.Find(r => r.Name == repoName);
+                            if (repoItem == null)
+                            {
+                                person.Repos.Add(new RepoItem() { Name = repoName, Count = 1 });
+                            }
+                            else
+                            {
+                                repoItem.Count += 1;
+                            }
                         }
                     }
                 }
@@ -711,7 +699,7 @@ namespace dotnetthanks_loader
                         author = new Author { name = c.Commit.Author?.Name }
                     }
                 })
-                .Where(c => !string.IsNullOrEmpty(c.author.name) && !exclusions.Contains(c.author.name.ToLower()) && !c.author.name.ToLower().Contains("[bot]"))
+                .Where(c => !string.IsNullOrEmpty(c.author.name) && !BotExclusionConstants.IsBot(c.author.name) && !c.author.name.ToLower().Contains("[bot]"))
                 .ToList();
             }
             catch (Exception ex)

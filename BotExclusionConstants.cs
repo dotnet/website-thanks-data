@@ -21,10 +21,10 @@ namespace dotnetthanks_loader
             "net source-build bot",
             "dotnet-maestro-bot",
             "dotnet-maestro[bot]",
-            ".NET Source-Build Bot",
+            ".net source-build bot",
             "dotnet-policy-service[bot]",
             "dotnet-sb-bot",
-            "Dotnet-GitSync-Bot",
+            "dotnet-gitsync-bot",
             "dependabot-preview[bot]",
         ];
 
