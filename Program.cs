@@ -11,6 +11,7 @@ namespace dotnetthanks_loader
     {
         private static HttpClient _client;
         private static string _token;
+        private static readonly ILoggingService _logger = Logger.Instance;
 
         private static GitHubClient _ghclient;
 
@@ -35,13 +36,13 @@ namespace dotnetthanks_loader
             IEnumerable<Release> allReleases = await LoadReleasesAsync(owner, repo);
 
             // Load Aspire and MAUI releases
-            Console.WriteLine("Loading Aspire releases...");
+            _logger.LogReleaseLoading("Aspire");
             var aspireReleases = await LoadReleasesAsync("dotnet", "aspire");
-            Console.WriteLine($"Loaded {aspireReleases.Count()} Aspire releases");
+            _logger.LogReleaseLoading("Aspire", aspireReleases.Count());
 
-            Console.WriteLine("Loading MAUI releases...");
+            _logger.LogReleaseLoading("MAUI");
             var mauiReleases = await LoadReleasesAsync("dotnet", "maui");
-            Console.WriteLine($"Loaded {mauiReleases.Count()} MAUI releases");
+            _logger.LogReleaseLoading("MAUI", mauiReleases.Count());
 
             // Sort releases from the youngest to the oldest by version
             // E.g.
@@ -131,7 +132,7 @@ namespace dotnetthanks_loader
 
                 if (diff.Count != 0)
                 {
-                    Console.WriteLine($"Processing diffs in releases...\n{repo} - {diff.Count}");
+                    _logger.Info($"Processing diffs in releases...\n{repo} - {diff.Count}");
 
                     // For each new release, find its prior release and add it into a new list for commit comparison
                     List<Release> sortedNewReleases = [];
@@ -184,14 +185,14 @@ namespace dotnetthanks_loader
                 // Process new Aspire releases in diff mode
                 if (aspireDiff.Count != 0)
                 {
-                    Console.WriteLine($"\nProcessing Aspire diffs... - {aspireDiff.Count}");
+                    _logger.Info($"\nProcessing Aspire diffs... - {aspireDiff.Count}");
                     await ProcessAspireReleases(aspireDiff, sortedMajorReleasesDictionary);
                 }
 
                 // Process new MAUI releases in diff mode
                 if (mauiDiff.Count != 0)
                 {
-                    Console.WriteLine($"\nProcessing MAUI diffs... - {mauiDiff.Count}");
+                    _logger.Info($"\nProcessing MAUI diffs... - {mauiDiff.Count}");
                     await ProcessMauiReleases(mauiDiff, sortedMajorReleasesDictionary);
                 }
 
@@ -204,7 +205,7 @@ namespace dotnetthanks_loader
                 }
                 else
                 {
-                    Console.WriteLine("The current releases list is up to date with core.js\nExiting...");
+                    _logger.Info("The current releases list is up to date with core.js\nExiting...");
                 }
             }
             else
@@ -228,12 +229,12 @@ namespace dotnetthanks_loader
                     }
                 }
 
-                Console.WriteLine($"Processing all releases...\n{repo} - {sortedReleases.Count}");
+                _logger.Info($"Processing all releases...\n{repo} - {sortedReleases.Count}");
 
                 // If latest-only mode, filter to only newest releases per major version
                 if (isLatestOnlyMode)
                 {
-                    Console.WriteLine("Latest-only mode: Processing only newest contributors per .NET version");
+                    _logger.Info("Latest-only mode: Processing only newest contributors per .NET version");
 
                     // Group releases by major.minor and take only the newest ones
                     var latestReleases = sortedReleases
@@ -247,10 +248,10 @@ namespace dotnetthanks_loader
                     var latestAspireReleases = GetLatestExternalReleases(sortedAspireReleases, MapAspireVersionToDotNet);
                     var latestMauiReleases = GetLatestExternalReleases(sortedMauiReleases, MapMauiVersionToDotNet);
 
-                    Console.WriteLine($"\nProcessing latest Aspire releases... - {latestAspireReleases.Count}");
+                    _logger.Info($"\nProcessing latest Aspire releases... - {latestAspireReleases.Count}");
                     await ProcessAspireReleases(latestAspireReleases, sortedMajorReleasesDictionary, true);
 
-                    Console.WriteLine($"\nProcessing latest MAUI releases... - {latestMauiReleases.Count}");
+                    _logger.Info($"\nProcessing latest MAUI releases... - {latestMauiReleases.Count}");
                     await ProcessMauiReleases(latestMauiReleases, sortedMajorReleasesDictionary, true);
                 }
                 else
@@ -258,11 +259,11 @@ namespace dotnetthanks_loader
                     await ProcessReleases(sortedReleases, sortedMajorReleasesDictionary, repo);
 
                     // Process Aspire releases
-                    Console.WriteLine($"\nProcessing Aspire releases... - {sortedAspireReleases.Count}");
+                    _logger.Info($"\nProcessing Aspire releases... - {sortedAspireReleases.Count}");
                     await ProcessAspireReleases(sortedAspireReleases, sortedMajorReleasesDictionary);
 
                     // Process MAUI releases
-                    Console.WriteLine($"\nProcessing MAUI releases... - {sortedMauiReleases.Count}");
+                    _logger.Info($"\nProcessing MAUI releases... - {sortedMauiReleases.Count}");
                     await ProcessMauiReleases(sortedMauiReleases, sortedMajorReleasesDictionary);
                 }
 
@@ -309,7 +310,7 @@ namespace dotnetthanks_loader
                 if (isLatestOnly)
                 {
                     majorRelease?.ProcessedReleases.Add(currentRelease.Tag);
-                    Console.WriteLine($"Processing (latest-only): {repo} {currentRelease.Tag}");
+                    _logger.Info($"Processing (latest-only): {repo} {currentRelease.Tag}");
 
                     // For latest-only, we want contributors from this single release
                     // We'll use the previous release in the full list for comparison
@@ -341,14 +342,14 @@ namespace dotnetthanks_loader
                     if (previousRelease is null)
                     {
                         // Is this the first release?
-                        Console.WriteLine($"[INFO]: {currentRelease.Tag} is the first release in the series.");
+                        _logger.Info($"{currentRelease.Tag} is the first release in the series.");
                         //Debugger.Break();
                         continue;
                     }
 
                     majorRelease?.ProcessedReleases.Add(currentRelease.Tag);
 
-                    Console.WriteLine($"Processing:[{i}] {repo} {previousRelease.Tag}..{currentRelease.Tag}");
+                    _logger.LogVersionProcessing(repo, previousRelease.Tag, currentRelease.Tag);
                 }
 
                 // for each child repo get commits and count contribs
@@ -359,7 +360,7 @@ namespace dotnetthanks_loader
                     if (repoPrevRelease is null)
                     {
                         // This may happen
-                        Console.WriteLine($"[ERROR]: {repoCurrentRelease.Url} doesn't exist in {previousRelease.Tag}!");
+                        _logger.LogValidationError(repoCurrentRelease.Url, $"doesn't exist in {previousRelease.Tag}");
                         continue;
                     }
 
@@ -367,7 +368,7 @@ namespace dotnetthanks_loader
 
                     try
                     {
-                        Console.WriteLine($"\tProcessing: {repoCurrentRelease.Name}: {repoPrevRelease.Tag}..{repoCurrentRelease.Tag}");
+                        _logger.Debug($"Processing: {repoCurrentRelease.Name}: {repoPrevRelease.Tag}..{repoCurrentRelease.Tag}");
 
                         if (repoPrevRelease.Tag != repoCurrentRelease.Tag)
                         {
@@ -390,7 +391,7 @@ namespace dotnetthanks_loader
                     }
                     catch (Exception ex)
                     {
-                        Console.WriteLine(ex.Message);
+                        _logger.Error(ex);
                     }
                 }
 
@@ -417,7 +418,7 @@ namespace dotnetthanks_loader
                 int dotnetMajor = versionMapper(currentRelease.Tag);
                 if (dotnetMajor == -1)
                 {
-                    Console.WriteLine($"[SKIP]: {repoName} {currentRelease.Tag} does not map to .NET 8, 9, or 10");
+                    _logger.LogSkip($"{repoName} {currentRelease.Tag}", "does not map to .NET 8, 9, or 10");
                     continue;
                 }
 
@@ -425,7 +426,7 @@ namespace dotnetthanks_loader
                 majorReleasesDict.TryGetValue($"{dotnetMajor}.{0}", out var majorRelease);
                 if (majorRelease == null)
                 {
-                    Console.WriteLine($"[ERROR]: .NET {dotnetMajor}.0 not found in dictionary for {repoName} {currentRelease.Tag}");
+                    _logger.Error($".NET {dotnetMajor}.0 not found in dictionary for {repoName} {currentRelease.Tag}");
                     continue;
                 }
 
@@ -460,7 +461,7 @@ namespace dotnetthanks_loader
                 string processedReleaseTag = $"{repoName.ToLower()}-{currentRelease.Tag}";
                 majorRelease.ProcessedReleases.Add(processedReleaseTag);
 
-                Console.WriteLine($"Processing: {repoName.ToLower()} {previousRelease.Tag}..{currentRelease.Tag} -> .NET {dotnetMajor}.0");
+                _logger.LogVersionProcessing($"{repoName.ToLower()} -> .NET {dotnetMajor}.0", previousRelease.Tag, currentRelease.Tag);
 
                 try
                 {
@@ -478,7 +479,7 @@ namespace dotnetthanks_loader
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[ERROR]: {ex.Message}");
+                    _logger.Error(ex);
                 }
             }
         }
@@ -643,7 +644,7 @@ namespace dotnetthanks_loader
 
                 if (initialComparison.TotalCommits > 300)
                 {
-                    Console.WriteLine($"\t\t[INFO] {fromRelease}..{toRelease} has {initialComparison.TotalCommits} total commits, paging through all commits...");
+                    _logger.Debug($"{fromRelease}..{toRelease} has {initialComparison.TotalCommits} total commits, paging through all commits...");
 
                     // Calculate number of pages needed (300 commits per page)
                     var totalPages = (int)Math.Ceiling((double)initialComparison.TotalCommits / 300);
@@ -661,7 +662,7 @@ namespace dotnetthanks_loader
                         var pagedComparison = await _ghclient.Repository.Commit.Compare(owner, repo, fromRelease, toRelease, options);
                         allCommits.AddRange(pagedComparison.Commits);
 
-                        Console.WriteLine($"\t\t\tLoaded page {page}/{totalPages} ({pagedComparison.Commits.Count()} commits)");
+                        _logger.Debug($"Loaded page {page}/{totalPages} ({pagedComparison.Commits.Count()} commits)");
                     }
                 }
                 else
@@ -680,7 +681,7 @@ namespace dotnetthanks_loader
 
                 if (mergeCommits > 0)
                 {
-                    Console.WriteLine($"\t\tFiltered {mergeCommits} merge commits, counting {filteredCommits} individual commits");
+                    _logger.Debug($"Filtered {mergeCommits} merge commits, counting {filteredCommits} individual commits");
                 }
 
                 // Convert filtered commits to your MergeBaseCommit format
@@ -704,7 +705,7 @@ namespace dotnetthanks_loader
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[ERROR] Compare {fromRelease}...{toRelease}: {ex.Message}");
+                _logger.Error(ex, $"Compare {fromRelease}...{toRelease}");
                 return null;
             }
         }
@@ -720,7 +721,7 @@ namespace dotnetthanks_loader
             }
             catch (Exception ex)
             {
-                Console.WriteLine(ex.Message);
+                _logger.Error(ex, "Failed to load core.json");
             }
 
             return null;
@@ -737,7 +738,7 @@ namespace dotnetthanks_loader
             }
             catch (Exception ex)
             {
-                Console.WriteLine(ex.Message);
+                _logger.Error(ex, "Failed to load core.json from URL");
             }
 
             return null;
@@ -761,7 +762,7 @@ namespace dotnetthanks_loader
                     var resetTime = DateTimeOffset.FromUnixTimeSeconds(response.rate.reset);
                     var delay = resetTime - DateTimeOffset.UtcNow + TimeSpan.FromMinutes(1);
                     var until = DateTime.Now.Add(delay);
-                    Console.WriteLine($"Rate limit exceeded. Waiting for {delay.TotalMinutes:N1} mins until {until}.");
+                    _logger.LogRateLimit(delay.TotalMinutes, until);
                     await Task.Delay(delay);
                     remainingRetries--;
                     goto Retry;
