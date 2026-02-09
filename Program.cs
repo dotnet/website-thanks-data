@@ -2,6 +2,7 @@
 using Octokit;
 using System.Diagnostics;
 using System.Net.Http.Json;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -14,6 +15,11 @@ namespace dotnetthanks_loader
         private static readonly ILoggingService _logger = Logger.Instance;
 
         private static GitHubClient _ghclient;
+
+        private static readonly JsonSerializerOptions _jsonOptions = new()
+        {
+            Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        };
 
         static async Task Main(string[] args)
         {
@@ -201,7 +207,7 @@ namespace dotnetthanks_loader
                 {
                     sortedMajorReleasesList = [.. sortedMajorReleasesDictionary.Values.OrderByDescending(o => o.Version)];
 
-                    File.WriteAllText($"./{repo}.json", JsonSerializer.Serialize(sortedMajorReleasesList));
+                    File.WriteAllText($"./{repo}.json", JsonSerializer.Serialize(sortedMajorReleasesList, _jsonOptions));
                 }
                 else
                 {
@@ -269,7 +275,7 @@ namespace dotnetthanks_loader
 
                 sortedMajorReleasesList = [.. sortedMajorReleasesDictionary.Values];
 
-                File.WriteAllText($"./{repo}.json", JsonSerializer.Serialize(sortedMajorReleasesList));
+                File.WriteAllText($"./{repo}.json", JsonSerializer.Serialize(sortedMajorReleasesList, _jsonOptions));
             }
         }
 
