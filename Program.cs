@@ -436,32 +436,16 @@ namespace dotnetthanks_loader
                     continue;
                 }
 
-                // In latest-only mode, only process the first release for each .NET version
-                if (isLatestOnly)
+                // Skip if this is the last release (no previous to compare against)
+                if (i == releases.Count - 1)
                 {
-                    // Since GetLatestExternalReleases already filtered to one per .NET version,
-                    // we just need to get commits from this release vs its previous release
-                    if (i == releases.Count - 1)
-                    {
-                        string releaseTag = $"{repoName.ToLower()}-{currentRelease.Tag}";
-                        majorRelease.ProcessedReleases.Add(releaseTag);
-                        break;
-                    }
-                    previousRelease = releases[i + 1];
+                    // Add to processed releases for the last release
+                    string releaseTag = $"{repoName.ToLower()}-{currentRelease.Tag}";
+                    majorRelease.ProcessedReleases.Add(releaseTag);
+                    break;
                 }
-                else
-                {
-                    // Skip if this is the last release (no previous to compare against)
-                    if (i == releases.Count - 1)
-                    {
-                        // Add to processed releases for the last release
-                        string releaseTag = $"{repoName.ToLower()}-{currentRelease.Tag}";
-                        majorRelease.ProcessedReleases.Add(releaseTag);
-                        break;
-                    }
 
-                    previousRelease = releases[i + 1];
-                }
+                previousRelease = releases[i + 1];
 
                 // Add to processed releases
                 string processedReleaseTag = $"{repoName.ToLower()}-{currentRelease.Tag}";
