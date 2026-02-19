@@ -10,7 +10,7 @@ namespace dotnetthanks_loader
 {
     class Program
     {
-        private static HttpClient _client;
+        private static HttpClient _client = new();
         private static string _token;
         private static readonly ILoggingService _logger = Logger.Instance;
 
@@ -84,7 +84,6 @@ namespace dotnetthanks_loader
             List<MajorRelease> sortedMajorReleasesList = [];
 
             bool isDiffMode = args != null && args.Length > 0 && args[0] == "diff";
-            bool isLatestOnlyMode = args != null && args.Length > 1 && args[1] == "latest";
 
             // If arg 1 is "diff" calculate the diff and append it to current core.js file
             if (isDiffMode)
@@ -237,41 +236,15 @@ namespace dotnetthanks_loader
 
                 _logger.Info($"Processing all releases...\n{repo} - {sortedReleases.Count}");
 
-                // If latest-only mode, filter to only newest releases per major version
-                if (isLatestOnlyMode)
-                {
-                    _logger.Info("Latest-only mode: Processing only newest contributors per .NET version");
+                await ProcessReleases(sortedReleases, sortedMajorReleasesDictionary, repo);
 
-                    // Group releases by major.minor and take only the newest ones
-                    var latestReleases = sortedReleases
-                        .GroupBy(r => $"{r.Version.Major}.{r.Version.Minor}")
-                        .Select(g => g.First()) // First is already the newest due to OrderByDescending
-                        .ToList();
+                // Process Aspire releases
+                _logger.Info($"\nProcessing Aspire releases... - {sortedAspireReleases.Count}");
+                await ProcessAspireReleases(sortedAspireReleases, sortedMajorReleasesDictionary);
 
-                    await ProcessReleases(latestReleases, sortedMajorReleasesDictionary, repo, false, true);
-
-                    // Get latest Aspire and MAUI releases per .NET version
-                    var latestAspireReleases = GetLatestExternalReleases(sortedAspireReleases, VersionMapper.MapAspireVersionToDotNet);
-                    var latestMauiReleases = GetLatestExternalReleases(sortedMauiReleases, VersionMapper.MapMauiVersionToDotNet);
-
-                    _logger.Info($"\nProcessing latest Aspire releases... - {latestAspireReleases.Count}");
-                    await ProcessAspireReleases(latestAspireReleases, sortedMajorReleasesDictionary, true);
-
-                    _logger.Info($"\nProcessing latest MAUI releases... - {latestMauiReleases.Count}");
-                    await ProcessMauiReleases(latestMauiReleases, sortedMajorReleasesDictionary, true);
-                }
-                else
-                {
-                    await ProcessReleases(sortedReleases, sortedMajorReleasesDictionary, repo);
-
-                    // Process Aspire releases
-                    _logger.Info($"\nProcessing Aspire releases... - {sortedAspireReleases.Count}");
-                    await ProcessAspireReleases(sortedAspireReleases, sortedMajorReleasesDictionary);
-
-                    // Process MAUI releases
-                    _logger.Info($"\nProcessing MAUI releases... - {sortedMauiReleases.Count}");
-                    await ProcessMauiReleases(sortedMauiReleases, sortedMajorReleasesDictionary);
-                }
+                // Process MAUI releases
+                _logger.Info($"\nProcessing MAUI releases... - {sortedMauiReleases.Count}");
+                await ProcessMauiReleases(sortedMauiReleases, sortedMajorReleasesDictionary);
 
                 sortedMajorReleasesList = [.. sortedMajorReleasesDictionary.Values];
 
@@ -302,7 +275,7 @@ namespace dotnetthanks_loader
         }
 
 #nullable enable
-        private static async Task ProcessReleases(List<Release> releases, Dictionary<string, MajorRelease> majorReleasesDict, string repo, bool isDiff = false, bool isLatestOnly = false)
+        private static async Task ProcessReleases(List<Release> releases, Dictionary<string, MajorRelease> majorReleasesDict, string repo, bool isDiff = false)
         {
             // dotnet/core
             Release currentRelease;
@@ -312,51 +285,29 @@ namespace dotnetthanks_loader
                 currentRelease = releases[i];
                 majorReleasesDict.TryGetValue($"{currentRelease.Version.Major}.{currentRelease.Version.Minor}", out var majorRelease);
 
-                // In latest-only mode, process only the first release without comparison
-                if (isLatestOnly)
+                // Add the first release to the list of processed releases so diff does not pick it up
+                if (i == releases.Count - 1)
                 {
-                    majorRelease?.ProcessedReleases.Add(currentRelease.Tag);
-                    _logger.Info($"Processing (latest-only): {repo} {currentRelease.Tag}");
-
-                    // For latest-only, we want contributors from this single release
-                    // We'll use the previous release in the full list for comparison
-                    var allReleasesList = releases.ToList();
-                    if (i < allReleasesList.Count - 1)
+                    if (!isDiff)
                     {
-                        previousRelease = allReleasesList[i + 1];
+                        majorRelease?.ProcessedReleases.Add(currentRelease.Tag);
                     }
-                    else
-                    {
-                        // This is the oldest release, skip it
-                        break;
-                    }
+                    break;
                 }
-                else
+
+                previousRelease = GetPreviousRelease(releases, currentRelease, i + 1);
+
+                if (previousRelease is null)
                 {
-                    // Add the first release to the list of processed releases so diff does not pick it up
-                    if (i == releases.Count - 1)
-                    {
-                        if (!isDiff)
-                        {
-                            majorRelease?.ProcessedReleases.Add(currentRelease.Tag);
-                        }
-                        break;
-                    }
-
-                    previousRelease = GetPreviousRelease(releases, currentRelease, i + 1);
-
-                    if (previousRelease is null)
-                    {
-                        // Is this the first release?
-                        _logger.Info($"{currentRelease.Tag} is the first release in the series.");
-                        //Debugger.Break();
-                        continue;
-                    }
-
-                    majorRelease?.ProcessedReleases.Add(currentRelease.Tag);
-
-                    _logger.LogVersionProcessing(repo, previousRelease.Tag, currentRelease.Tag);
+                    // Is this the first release?
+                    _logger.Info($"{currentRelease.Tag} is the first release in the series.");
+                    //Debugger.Break();
+                    continue;
                 }
+
+                majorRelease?.ProcessedReleases.Add(currentRelease.Tag);
+
+                _logger.LogVersionProcessing(repo, previousRelease.Tag, currentRelease.Tag);
 
                 // for each child repo get commits and count contribs
                 foreach (var repoCurrentRelease in currentRelease.ChildRepos)
@@ -410,8 +361,7 @@ namespace dotnetthanks_loader
             List<Release> releases,
             Dictionary<string, MajorRelease> majorReleasesDict,
             string repoName,
-            Func<string, int> versionMapper,
-            bool isLatestOnly = false)
+            Func<string, int> versionMapper)
         {
             Release currentRelease;
             Release previousRelease;
@@ -474,14 +424,14 @@ namespace dotnetthanks_loader
             }
         }
 
-        private static async Task ProcessAspireReleases(List<Release> aspireReleases, Dictionary<string, MajorRelease> majorReleasesDict, bool isLatestOnly = false)
+        private static async Task ProcessAspireReleases(List<Release> aspireReleases, Dictionary<string, MajorRelease> majorReleasesDict)
         {
-            await ProcessExternalReleases(aspireReleases, majorReleasesDict, "aspire", VersionMapper.MapAspireVersionToDotNet, isLatestOnly);
+            await ProcessExternalReleases(aspireReleases, majorReleasesDict, "aspire", VersionMapper.MapAspireVersionToDotNet);
         }
 
-        private static async Task ProcessMauiReleases(List<Release> mauiReleases, Dictionary<string, MajorRelease> majorReleasesDict, bool isLatestOnly = false)
+        private static async Task ProcessMauiReleases(List<Release> mauiReleases, Dictionary<string, MajorRelease> majorReleasesDict)
         {
-            await ProcessExternalReleases(mauiReleases, majorReleasesDict, "maui", VersionMapper.MapMauiVersionToDotNet, isLatestOnly);
+            await ProcessExternalReleases(mauiReleases, majorReleasesDict, "maui", VersionMapper.MapMauiVersionToDotNet);
         }
 
 #nullable disable
