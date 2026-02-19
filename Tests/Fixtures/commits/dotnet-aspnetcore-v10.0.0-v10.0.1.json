@@ -1,0 +1,14 @@
+[
+    {
+        "Sha": "asp001",
+        "AuthorName": "ASP.NET Developer",
+        "AuthorUrl": "https://github.com/aspdev",
+        "AvatarUrl": "https://avatars.githubusercontent.com/u/12349"
+    },
+    {
+        "Sha": "asp002",
+        "AuthorName": "copilot",
+        "AuthorUrl": "https://github.com/copilot",
+        "AvatarUrl": "https://avatars.githubusercontent.com/u/12345"
+    }
+]

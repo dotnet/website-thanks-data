@@ -1,0 +1,40 @@
+[
+    {
+        "Name": ".NET 10.0.1",
+        "Tag": "v10.0.1",
+        "Id": 12345,
+        "ChildRepos": [
+            {
+                "Name": "runtime",
+                "Url": "https://github.com/dotnet/runtime/releases/tag/v10.0.1"
+            },
+            {
+                "Name": "sdk",
+                "Url": "https://github.com/dotnet/sdk/releases/tag/v10.0.101"
+            },
+            {
+                "Name": "aspnetcore",
+                "Url": "https://github.com/dotnet/aspnetcore/releases/tag/v10.0.1"
+            }
+        ]
+    },
+    {
+        "Name": ".NET 10.0",
+        "Tag": "v10.0.0",
+        "Id": 12344,
+        "ChildRepos": [
+            {
+                "Name": "runtime",
+                "Url": "https://github.com/dotnet/runtime/releases/tag/v10.0.0"
+            },
+            {
+                "Name": "sdk",
+                "Url": "https://github.com/dotnet/sdk/releases/tag/v10.0.100"
+            },
+            {
+                "Name": "aspnetcore",
+                "Url": "https://github.com/dotnet/aspnetcore/releases/tag/v10.0.0"
+            }
+        ]
+    }
+]

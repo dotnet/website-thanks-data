@@ -22,6 +22,7 @@ namespace dotnetthanks_loader
             "v8.0.0",
             "v9.0.0",
             "v10.0.0",
+            "v11.0.0",
         ];
         private string _tag;
 
