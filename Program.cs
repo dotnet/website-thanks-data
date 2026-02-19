@@ -251,8 +251,8 @@ namespace dotnetthanks_loader
                     await ProcessReleases(latestReleases, sortedMajorReleasesDictionary, repo, false, true);
 
                     // Get latest Aspire and MAUI releases per .NET version
-                    var latestAspireReleases = GetLatestExternalReleases(sortedAspireReleases, MapAspireVersionToDotNet);
-                    var latestMauiReleases = GetLatestExternalReleases(sortedMauiReleases, MapMauiVersionToDotNet);
+                    var latestAspireReleases = GetLatestExternalReleases(sortedAspireReleases, VersionMapper.MapAspireVersionToDotNet);
+                    var latestMauiReleases = GetLatestExternalReleases(sortedMauiReleases, VersionMapper.MapMauiVersionToDotNet);
 
                     _logger.Info($"\nProcessing latest Aspire releases... - {latestAspireReleases.Count}");
                     await ProcessAspireReleases(latestAspireReleases, sortedMajorReleasesDictionary, true);

@@ -12,20 +12,21 @@ namespace dotnetthanks_loader
         /// </summary>
         public static readonly string[] BotUsernames =
         [
+            ".net source-build bot",
+            "copilot",
             "dependabot[bot]",
-            "github-actions[bot]",
-            "msftbot[bot]",
+            "dependabot-preview[bot]",
             "dotnet bot",
             "dotnet-bot",
-            "nuget team bot",
-            "net source-build bot",
+            "dotnet-gitsync-bot",
             "dotnet-maestro-bot",
             "dotnet-maestro[bot]",
-            ".net source-build bot",
             "dotnet-policy-service[bot]",
             "dotnet-sb-bot",
-            "dotnet-gitsync-bot",
-            "dependabot-preview[bot]",
+            "github-actions[bot]",
+            "msftbot[bot]",
+            "net source-build bot",
+            "nuget team bot",
         ];
 
         /// <summary>
