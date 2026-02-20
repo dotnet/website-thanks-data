@@ -1,14 +1,14 @@
 [
     {
         "Sha": "abc123",
-        "AuthorName": "copilot",
-        "AuthorUrl": "https://github.com/copilot",
+        "AuthorName": "TestContributor",
+        "AuthorUrl": "https://github.com/testcontributor",
         "AvatarUrl": "https://avatars.githubusercontent.com/u/12345"
     },
     {
         "Sha": "def456",
-        "AuthorName": "copilot",
-        "AuthorUrl": "https://github.com/copilot",
+        "AuthorName": "TestContributor",
+        "AuthorUrl": "https://github.com/testcontributor",
         "AvatarUrl": "https://avatars.githubusercontent.com/u/12345"
     },
     {
@@ -37,8 +37,8 @@
     },
     {
         "Sha": "stu901",
-        "AuthorName": "copilot",
-        "AuthorUrl": "https://github.com/copilot",
+        "AuthorName": "TestContributor",
+        "AuthorUrl": "https://github.com/testcontributor",
         "AvatarUrl": "https://avatars.githubusercontent.com/u/12345"
     }
 ]

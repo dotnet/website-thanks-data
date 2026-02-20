@@ -21,11 +21,11 @@ namespace dotnetthanks_loader.Tests
         }
 
         /// <summary>
-        /// Test 1: Validates that "copilot" user has the correct total commit count
+        /// Test 1: Validates that "TestContributor" user has the correct total commit count
         /// and specific repo commit counts between .NET 10.0 GA and 10.0.1 releases.
         /// </summary>
         [Fact]
-        public async Task CopilotUser_HasCorrectCommitCounts()
+        public async Task TestContributor_HasCorrectCommitCounts()
         {
             // Arrange
             var releases = (await _mockGitHubService.GetReleasesAsync("dotnet", "core")).ToList();
@@ -53,23 +53,23 @@ namespace dotnetthanks_loader.Tests
 
             // Assert - Contributors are added to the 10.0 major release
             var majorRelease = majorReleasesDict["10.0"];
-            var copilotContributor = majorRelease.Contributors.Find(c => c.Name == "copilot");
+            var testContributor = majorRelease.Contributors.Find(c => c.Name == "TestContributor");
             
-            Assert.NotNull(copilotContributor);
+            Assert.NotNull(testContributor);
             
-            // copilot has: 3 commits in runtime, 1 in sdk, 1 in aspnetcore = 5 total
-            Assert.Equal(5, copilotContributor.Count);
+            // TestContributor has: 3 commits in runtime, 1 in sdk, 1 in aspnetcore = 5 total
+            Assert.Equal(5, testContributor.Count);
             
             // Verify specific repo counts
-            var runtimeRepo = copilotContributor.Repos.Find(r => r.Name == "runtime");
+            var runtimeRepo = testContributor.Repos.Find(r => r.Name == "runtime");
             Assert.NotNull(runtimeRepo);
             Assert.Equal(3, runtimeRepo.Count);
             
-            var sdkRepo = copilotContributor.Repos.Find(r => r.Name == "sdk");
+            var sdkRepo = testContributor.Repos.Find(r => r.Name == "sdk");
             Assert.NotNull(sdkRepo);
             Assert.Equal(1, sdkRepo.Count);
             
-            var aspnetcoreRepo = copilotContributor.Repos.Find(r => r.Name == "aspnetcore");
+            var aspnetcoreRepo = testContributor.Repos.Find(r => r.Name == "aspnetcore");
             Assert.NotNull(aspnetcoreRepo);
             Assert.Equal(1, aspnetcoreRepo.Count);
         }
@@ -108,7 +108,7 @@ namespace dotnetthanks_loader.Tests
             var majorRelease = majorReleasesDict["10.0"];
             
             // Expected contributors (bots excluded):
-            // - copilot (3 in runtime, 1 in sdk, 1 in aspnetcore)
+            // - TestContributor (3 in runtime, 1 in sdk, 1 in aspnetcore)
             // - John Developer (1 in runtime)
             // - Jane Coder (1 in runtime)
             // - SDK Developer (1 in sdk)
@@ -117,9 +117,9 @@ namespace dotnetthanks_loader.Tests
             Assert.Equal(5, majorRelease.Contributors.Count);
             
             // Verify total contributions (non-bot commits)
-            // runtime: 5 (3 copilot + 1 john + 1 jane, 2 bots excluded)
-            // sdk: 2 (1 copilot + 1 sdk dev, 1 bot excluded)
-            // aspnetcore: 2 (1 copilot + 1 asp dev)
+            // runtime: 5 (3 TestContributor + 1 john + 1 jane, 2 bots excluded)
+            // sdk: 2 (1 TestContributor + 1 sdk dev, 1 bot excluded)
+            // aspnetcore: 2 (1 TestContributor + 1 asp dev)
             // Total: 9 contributions
             Assert.Equal(9, majorRelease.Contributions);
         }
@@ -180,7 +180,7 @@ namespace dotnetthanks_loader.Tests
             }
 
             // Verify non-bots are not excluded
-            Assert.False(BotExclusionConstants.IsBot("copilot"));
+            Assert.False(BotExclusionConstants.IsBot("TestContributor"));
             Assert.False(BotExclusionConstants.IsBot("John Developer"));
             Assert.False(BotExclusionConstants.IsBot("Jane Coder"));
         }
