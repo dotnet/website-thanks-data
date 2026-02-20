@@ -1,0 +1,44 @@
+[
+    {
+        "Sha": "abc123",
+        "AuthorName": "TestContributor",
+        "AuthorUrl": "https://github.com/testcontributor",
+        "AvatarUrl": "https://avatars.githubusercontent.com/u/12345"
+    },
+    {
+        "Sha": "def456",
+        "AuthorName": "TestContributor",
+        "AuthorUrl": "https://github.com/testcontributor",
+        "AvatarUrl": "https://avatars.githubusercontent.com/u/12345"
+    },
+    {
+        "Sha": "ghi789",
+        "AuthorName": "John Developer",
+        "AuthorUrl": "https://github.com/johndev",
+        "AvatarUrl": "https://avatars.githubusercontent.com/u/12346"
+    },
+    {
+        "Sha": "jkl012",
+        "AuthorName": "Jane Coder",
+        "AuthorUrl": "https://github.com/janecoder",
+        "AvatarUrl": "https://avatars.githubusercontent.com/u/12347"
+    },
+    {
+        "Sha": "mno345",
+        "AuthorName": "dependabot[bot]",
+        "AuthorUrl": "https://github.com/apps/dependabot",
+        "AvatarUrl": "https://avatars.githubusercontent.com/u/49699333"
+    },
+    {
+        "Sha": "pqr678",
+        "AuthorName": "github-actions[bot]",
+        "AuthorUrl": "https://github.com/apps/github-actions",
+        "AvatarUrl": "https://avatars.githubusercontent.com/u/41898282"
+    },
+    {
+        "Sha": "stu901",
+        "AuthorName": "TestContributor",
+        "AuthorUrl": "https://github.com/testcontributor",
+        "AvatarUrl": "https://avatars.githubusercontent.com/u/12345"
+    }
+]
