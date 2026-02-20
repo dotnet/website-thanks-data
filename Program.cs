@@ -262,7 +262,9 @@ namespace dotnetthanks_loader
             {
                 int dotnetVersion = versionMapper(release.Tag);
                 if (dotnetVersion == -1)
+                {
                     continue;
+                }
 
                 if (!processedVersions.Contains(dotnetVersion))
                 {
@@ -353,7 +355,9 @@ namespace dotnetthanks_loader
                 }
 
                 if (Environment.GetEnvironmentVariable("TEST") == "1")
+                {
                     break;
+                }
             }
         }
 
@@ -447,7 +451,9 @@ namespace dotnetthanks_loader
         {
             if (currentRelease.Version.Major == sortedReleases[index].Version.Major &&
                 currentRelease.Version.Minor == sortedReleases[index].Version.Minor)
+            {
                 return sortedReleases[index];
+            }
 
             return sortedReleases.Skip(index).FirstOrDefault(r => currentRelease.Version > r.Version && r.IsGA);
         }
@@ -463,7 +469,9 @@ namespace dotnetthanks_loader
                     author.name = item.commit.author.name;
 
                     if (string.IsNullOrEmpty(author.name))
+                    {
                         author.name = "Unknown";
+                    }
 
                     if (!BotExclusionConstants.IsBot(author.name))
                     {

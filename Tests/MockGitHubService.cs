@@ -20,11 +20,11 @@ namespace dotnetthanks_loader.Tests
             _logger = logger ?? Logger.Instance;
         }
 
-        /// <inheritdoc/>
+
         public async Task<IEnumerable<Release>> GetReleasesAsync(string owner, string repo)
         {
             var filePath = Path.Combine(_fixturesPath, $"releases-{owner}-{repo}.json");
-            
+
             if (!File.Exists(filePath))
             {
                 _logger.Warning($"Fixture file not found: {filePath}");
@@ -39,24 +39,24 @@ namespace dotnetthanks_loader.Tests
                 Name = r.Name,
                 Tag = r.Tag,
                 Id = r.Id,
-                ChildRepos = r.ChildRepos?.Select(c => new ChildRepo 
-                { 
-                    Name = c.Name, 
-                    Url = c.Url 
+                ChildRepos = r.ChildRepos?.Select(c => new ChildRepo
+                {
+                    Name = c.Name,
+                    Url = c.Url
                 }).ToList() ?? [],
                 Contributors = []
             });
         }
 
-        /// <inheritdoc/>
+
         public async Task<List<MergeBaseCommit>?> CompareCommitsAsync(string owner, string repo, string fromRef, string toRef)
         {
             // Sanitize refs for filename (replace special chars)
             var safeFromRef = SanitizeRefForFilename(fromRef);
             var safeToRef = SanitizeRefForFilename(toRef);
-            
+
             var filePath = Path.Combine(_fixturesPath, "commits", $"{owner}-{repo}-{safeFromRef}-{safeToRef}.json");
-            
+
             if (!File.Exists(filePath))
             {
                 _logger.Debug($"Commit fixture file not found: {filePath}");
@@ -81,17 +81,17 @@ namespace dotnetthanks_loader.Tests
                         author = new Author { name = c.AuthorName }
                     }
                 })
-                .Where(c => !string.IsNullOrEmpty(c.author.name) && 
-                           !BotExclusionConstants.IsBot(c.author.name) && 
+                .Where(c => !string.IsNullOrEmpty(c.author.name) &&
+                           !BotExclusionConstants.IsBot(c.author.name) &&
                            !c.author.name.ToLower().Contains("[bot]"))
                 .ToList();
         }
 
-        /// <inheritdoc/>
+
         public async Task<List<MajorRelease>?> LoadCoreJsonAsync()
         {
             var filePath = Path.Combine(_fixturesPath, "core.json");
-            
+
             if (!File.Exists(filePath))
             {
                 _logger.Warning($"Core.json fixture file not found: {filePath}");
@@ -102,7 +102,7 @@ namespace dotnetthanks_loader.Tests
             return JsonSerializer.Deserialize<List<MajorRelease>>(json);
         }
 
-        /// <inheritdoc/>
+
         public List<ChildRepo> ParseReleaseBody(string body)
         {
             var results = new List<ChildRepo>();

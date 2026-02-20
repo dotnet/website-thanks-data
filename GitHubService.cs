@@ -18,26 +18,25 @@ namespace dotnetthanks_loader
         private readonly ILoggingService _logger;
         private readonly bool _useLocalCoreJson;
 
-        public GitHubService(IConfiguration config, ILoggingService? logger = null, bool useLocalCoreJson = false)
+        public GitHubService(IConfiguration config, HttpClient httpClient, ILoggingService? logger = null, bool useLocalCoreJson = false)
         {
             _logger = logger ?? Logger.Instance;
             _useLocalCoreJson = useLocalCoreJson;
+            _httpClient = httpClient;
 
             _ghclient = new GitHubClient(new ProductHeaderValue("dotnet-thanks"));
-            
+
             var clientId = config.GetSection("GITHUB_CLIENTID").Value;
             var clientSecret = config.GetSection("GITHUB_CLIENTSECRET").Value;
-            
+
             if (!string.IsNullOrEmpty(clientId) && !string.IsNullOrEmpty(clientSecret))
             {
                 var basic = new Credentials(clientId, clientSecret);
                 _ghclient.Credentials = basic;
             }
-
-            _httpClient = new HttpClient();
         }
 
-        /// <inheritdoc/>
+
         public async Task<IEnumerable<Release>> GetReleasesAsync(string owner, string repo)
         {
             var results = await _ghclient.Repository.Release.GetAll(owner, repo);
@@ -52,7 +51,7 @@ namespace dotnetthanks_loader
             });
         }
 
-        /// <inheritdoc/>
+
         public async Task<List<MergeBaseCommit>?> CompareCommitsAsync(string owner, string repo, string fromRef, string toRef)
         {
             try
@@ -120,9 +119,9 @@ namespace dotnetthanks_loader
                             author = new Author { name = c.Commit.Author?.Name }
                         }
                     })
-                    .Where(c => !string.IsNullOrEmpty(c.author.name) && 
-                               !BotExclusionConstants.IsBot(c.author.name) && 
-                               !c.author.name.ToLower().Contains("[bot]"))
+                    .Where(c => !string.IsNullOrEmpty(c.author.name) &&
+                        !BotExclusionConstants.IsBot(c.author.name) &&
+                        !c.author.name.ToLower().Contains("[bot]"))
                     .ToList();
             }
             catch (Exception ex)
@@ -132,7 +131,6 @@ namespace dotnetthanks_loader
             }
         }
 
-        /// <inheritdoc/>
         public async Task<List<MajorRelease>?> LoadCoreJsonAsync()
         {
             if (_useLocalCoreJson)
@@ -172,13 +170,14 @@ namespace dotnetthanks_loader
             return null;
         }
 
-        /// <inheritdoc/>
         public List<ChildRepo> ParseReleaseBody(string body)
         {
             var results = new List<ChildRepo>();
 
             if (string.IsNullOrEmpty(body))
+            {
                 return results;
+            }
 
             var pattern = "\\[(.+)\\]\\(([^ ]+?)( \"(.+)\")?\\)";
             var rg = new Regex(pattern, RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.Multiline);

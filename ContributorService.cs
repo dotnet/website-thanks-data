@@ -18,7 +18,7 @@ namespace dotnetthanks_loader
             _logger = logger ?? Logger.Instance;
         }
 
-        /// <inheritdoc/>
+
         public async Task<Dictionary<string, MajorRelease>> ProcessReleasesAsync(
             List<Release> releases,
             Dictionary<string, MajorRelease> majorReleasesDict,
@@ -130,7 +130,7 @@ namespace dotnetthanks_loader
             return majorReleasesDict;
         }
 
-        /// <inheritdoc/>
+
         public void TallyCommits(MajorRelease majorRelease, string repoName, List<MergeBaseCommit> commits)
         {
             // these the commits within the release
@@ -142,7 +142,9 @@ namespace dotnetthanks_loader
                     author.name = item.commit.author.name;
 
                     if (string.IsNullOrEmpty(author.name))
+                    {
                         author.name = "Unknown";
+                    }
 
                     if (!BotExclusionConstants.IsBot(author.name))
                     {
@@ -181,15 +183,19 @@ namespace dotnetthanks_loader
             }
         }
 
-        /// <inheritdoc/>
+
         public Release? GetPreviousRelease(List<Release> sortedReleases, Release currentRelease, int index)
         {
             if (index >= sortedReleases.Count)
+            {
                 return null;
+            }
 
             if (currentRelease.Version.Major == sortedReleases[index].Version.Major &&
                 currentRelease.Version.Minor == sortedReleases[index].Version.Minor)
+            {
                 return sortedReleases[index];
+            }
 
             return sortedReleases.Skip(index).FirstOrDefault(r => currentRelease.Version > r.Version && r.IsGA);
         }
