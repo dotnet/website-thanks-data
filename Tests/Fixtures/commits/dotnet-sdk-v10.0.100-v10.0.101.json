@@ -1,0 +1,20 @@
+[
+    {
+        "Sha": "sdk001",
+        "AuthorName": "TestContributor",
+        "AuthorUrl": "https://github.com/testcontributor",
+        "AvatarUrl": "https://avatars.githubusercontent.com/u/12345"
+    },
+    {
+        "Sha": "sdk002",
+        "AuthorName": "SDK Developer",
+        "AuthorUrl": "https://github.com/sdkdev",
+        "AvatarUrl": "https://avatars.githubusercontent.com/u/12348"
+    },
+    {
+        "Sha": "sdk003",
+        "AuthorName": "dotnet-maestro[bot]",
+        "AuthorUrl": "https://github.com/apps/dotnet-maestro",
+        "AvatarUrl": "https://avatars.githubusercontent.com/u/42634292"
+    }
+]

@@ -20,7 +20,8 @@ namespace dotnetthanks_loader
             "v6.0.0",
             "v7.0.0",
             "v8.0.0",
-            "v9.0.0"
+            "v9.0.0",
+            "v10.0.0",
         ];
         private string _tag;
 

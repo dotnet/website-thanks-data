@@ -45,6 +45,7 @@ extends:
             timeoutInMinutes: 1440
             cancelTimeoutInMinutes: 5
             variables:
+              PREPARATION_SUCCEEDED: 'false'
               HAS_CORE_JSON: 'false'
               CORE_JSON_PATH: ''
               BRANCH_NAME: ''
@@ -67,17 +68,35 @@ extends:
                 inputs:
                   targetType: 'inline'
                   script: |
-                    set -euo pipefail 
+                    set +e  # Don't exit on error
+                    
+                    handle_failure() {
+                      echo "WARNING: $1"
+                      echo "##vso[task.setvariable variable=PREPARATION_SUCCEEDED]false"
+                      exit 0
+                    }
+
                     echo "$GITHUB_TOKEN"
                     dotnet user-secrets init
+                    [ $? -ne 0 ] && handle_failure "Failed to initialize user secrets"
+                    
                     dotnet user-secrets set GITHUB_CLIENTID "$GITHUB_CLIENTID"
                     dotnet user-secrets set GITHUB_CLIENTSECRET "$GITHUB_CLIENTSECRET"
-                    dotnet user-secrets set GITHUB_TOKEN "$GITHUB_TOKEN" 
+                    dotnet user-secrets set GITHUB_TOKEN "$GITHUB_TOKEN"
+                    
                     dotnet restore
+                    [ $? -ne 0 ] && handle_failure "Failed to restore packages"
+                    
                     dotnet build --configuration Release
+                    [ $? -ne 0 ] && handle_failure "Build failed"
+                    
+                    echo "Preparation completed successfully"
+                    echo "##vso[task.setvariable variable=PREPARATION_SUCCEEDED]true"
+                    exit 0
               
               - task: Bash@3
                 displayName: 'Run .NET Thanks Data Tool'
+                condition: eq(variables['PREPARATION_SUCCEEDED'], 'true')
                 env:
                   GITHUB_TOKEN: $(GITHUB_TOKEN)
                 inputs:

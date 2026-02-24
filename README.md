@@ -9,8 +9,8 @@ Each release of .NET is a collection of repositories. The list for each release 
 1. The loader application first loads all of the releases for [dotnet/core](https://github.com/dotnet/core/releases) ordered by newest -> oldest.
 1. For each release the **tag** of the current release and the **tag** of the previous release are used to retrieve the commits using the GitHub API : `https://api.github.com/repos/{owner}/{repo}/compare/{fromRelease}...{toRelease}`
 1. Each commit is inspected to create the data model using the `TallyCommits` method.
-    1. A `Contributor` object is created if needed
-    1. The commits for the given repo are added
+   1. A `Contributor` object is created if needed
+   1. The commits for the given repo are added
 
 Each child repo, other repositories in the release, are processed in the same manner.
 
@@ -20,7 +20,11 @@ Each child repo, other repositories in the release, are processed in the same ma
 1. Create a [GitHub Personal Access Token](https://github.com/settings/tokens)
 1. Fork the dotnetthanks-loader repo and cd into it.
 1. Create [user-secrets](https://docs.microsoft.com/aspnet/core/security/app-secrets?WT.mc_id=dotnet-00000-shboyer) using the following commands
-    1. `dotnet user-secrets init`
-    1. `dotnet user-secrets set GITHUB_CLIENTID <your-value>`
-    1. `dotnet user-secrets set GITHUB_CLIENTSECRET <your-value>`
-    1. `dotnet user-secrets set GITHUB_TOKEN <your Personal Access Token>`
+   1. `dotnet user-secrets init`
+   1. `dotnet user-secrets set GITHUB_CLIENTID <your-value>`
+   1. `dotnet user-secrets set GITHUB_CLIENTSECRET <your-value>`
+   1. `dotnet user-secrets set GITHUB_TOKEN <your Personal Access Token>`
+
+1. How to run different mode
+   1. dotnet run [Full regeneration (all releases, cumulative contributors)]
+   2. dotnet run diff [Loads existing core.json and only processes new releases that haven't been processed yet. Updates the file with new contributors]
