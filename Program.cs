@@ -1,21 +1,12 @@
 ﻿using Microsoft.Extensions.Configuration;
-using Octokit;
-using System.Diagnostics;
-using System.Net.Http.Json;
 using System.Text.Encodings.Web;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 
 namespace dotnetthanks_loader
 {
     class Program
     {
-        private static HttpClient _client = new();
-        private static string _token;
         private static readonly ILoggingService _logger = Logger.Instance;
-
-        private static GitHubClient _ghclient;
-
         private static readonly JsonSerializerOptions _jsonOptions = new()
         {
             Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
@@ -29,397 +20,320 @@ namespace dotnetthanks_loader
                 .AddUserSecrets<Program>()
                 .Build();
 
-            _token = config.GetSection("GITHUB_TOKEN").Value;
-
-            _ghclient = new GitHubClient(new ProductHeaderValue("dotnet-thanks"));
-            var basic = new Credentials(config.GetSection("GITHUB_CLIENTID").Value, config.GetSection("GITHUB_CLIENTSECRET").Value);
-            _ghclient.Credentials = basic;
+            // Initialize services
+            var httpClient = new HttpClient();
+            var gitHubService = new GitHubService(config, httpClient, _logger);
+            var contributorService = new ContributorService(gitHubService, _logger);
 
             var repo = "core";
             var owner = "dotnet";
 
-            // load all releases for dotnet/core
-            IEnumerable<Release> allReleases = await LoadReleasesAsync(owner, repo);
+            // Load all releases using GitHubService
+            _logger.Info("Loading releases...");
+            var allReleases = await gitHubService.GetReleasesAsync(owner, repo);
 
-            // Load Aspire and MAUI releases
             _logger.LogReleaseLoading("Aspire");
-            var aspireReleases = await LoadReleasesAsync("dotnet", "aspire");
+            var aspireReleases = await gitHubService.GetReleasesAsync("dotnet", "aspire");
             _logger.LogReleaseLoading("Aspire", aspireReleases.Count());
 
             _logger.LogReleaseLoading("MAUI");
-            var mauiReleases = await LoadReleasesAsync("dotnet", "maui");
+            var mauiReleases = await gitHubService.GetReleasesAsync("dotnet", "maui");
             _logger.LogReleaseLoading("MAUI", mauiReleases.Count());
 
-            // Sort releases from the youngest to the oldest by version
-            // E.g.
-            //      5.0.1
-            //      5.0.0       // GA
-            //      5.0.0-RC2
-            //      5.0.0-RC1
-            //      5.0.0-preview9
-            //      ...
-            //      5.0.0-preview2
-            //      3.1.10
-            //      3.1.9
-            //      3.1.8
-            //      ...
-            //      3.1.0       // GA
-            //      ...
-            //
+            // Sort releases from newest to oldest
             List<Release> sortedReleases = [..allReleases
                 .OrderByDescending(o => o.Version)
                 .ThenByDescending(o => o.Id)];
 
-            // Sort Aspire releases
             List<Release> sortedAspireReleases = [..aspireReleases
                 .OrderByDescending(o => o.Version)
                 .ThenByDescending(o => o.Id)];
 
-            // Sort MAUI releases
             List<Release> sortedMauiReleases = [..mauiReleases
                 .OrderByDescending(o => o.Version)
                 .ThenByDescending(o => o.Id)];
 
-            Dictionary<string, MajorRelease> sortedMajorReleasesDictionary = [];
-            List<MajorRelease> sortedMajorReleasesList = [];
+            Dictionary<string, MajorRelease> majorReleasesDictionary = [];
 
             bool isDiffMode = args != null && args.Length > 0 && args[0] == "diff";
 
-            // If arg 1 is "diff" calculate the diff and append it to current core.js file
             if (isDiffMode)
             {
-                // load current core.json file
-#if DEBUG
-                IEnumerable<MajorRelease> corejson = LoadCurrentCoreJson();
-#else
-                IEnumerable<MajorRelease> corejson = await LoadCurrentCoreJsonAsync();
-#endif
-                // create a dictionary with preprocessed data
-                foreach (var release in corejson)
-                {
-                    sortedMajorReleasesDictionary.Add($"{release.Version.Major}.{release.Version.Minor}", release);
-                }
-
-                List<string> processedReleases = [];
-
-                foreach (var o in corejson)
-                {
-                    processedReleases.AddRange(o.ProcessedReleases);
-                }
-
-                List<Release> diff = [.. sortedReleases.Where(o => !processedReleases.Contains(o.Tag))];
-
-                // Find new Aspire releases by checking for aspire- prefix in processedReleases
-                List<Release> aspireDiff = [..sortedAspireReleases.Where(r =>
-                    !processedReleases.Contains($"aspire-{r.Tag}"))];
-
-                // Find new MAUI releases by checking for maui- prefix in processedReleases
-                List<Release> mauiDiff = [..sortedMauiReleases.Where(r =>
-                    !processedReleases.Contains($"maui-{r.Tag}"))];
-
-                // Check if releases in diff are not in dictionary
-                foreach (var release in diff)
-                {
-                    if (!sortedMajorReleasesDictionary.ContainsKey($"{release.Version.Major}.{release.Version.Minor}"))
-                    {
-                        sortedMajorReleasesDictionary.Add($"{release.Version.Major}.{release.Version.Minor}", new MajorRelease
-                        {
-                            Contributions = 0,
-                            Contributors = [],
-                            Product = release.Product,
-                            Name = $"{release.Product} {release.Version.Major}.{release.Version.Minor}",
-                            Version = release.Version,
-                            Tag = $"v{release.Version.Major}.{release.Version.Minor}",
-                            ProcessedReleases = []
-                        });
-                    }
-                }
-
-                if (diff.Count != 0)
-                {
-                    _logger.Info($"Processing diffs in releases...\n{repo} - {diff.Count}");
-
-                    // For each new release, find its prior release and add it into a new list for commit comparison
-                    List<Release> sortedNewReleases = [];
-                    List<Release> majorReleasesList = [];
-                    var latestGARelease = sortedReleases.ToList().Find(r => r.IsGA);
-
-                    foreach (var r in diff)
-                    {
-                        var idx = sortedReleases.IndexOf(r);
-
-                        // Skip if this is the last (oldest) release - no previous version to compare against
-                        if (idx == sortedReleases.Count - 1)
-                        {
-                            sortedNewReleases.Add(r);
-                            continue;
-                        }
-
-                        var previousVersion = sortedReleases[idx + 1];
-
-                        // Add new release
-                        sortedNewReleases.Add(r);
-
-                        // If previous version isn't in newReleases already - add it
-                        if (!diff.Contains(previousVersion))
-                        {
-                            // Append the latest processed release or last GA if first release
-                            if (r.Version.Major != previousVersion.Version.Major)
-                            {
-                                sortedNewReleases.Add(latestGARelease);
-                            }
-                            else if (r.Version.Major == previousVersion.Version.Major)
-                            {
-                                sortedNewReleases.Add(previousVersion);
-                            }
-                        }
-                        else if (diff.Contains(previousVersion) && r.Version.Major != previousVersion.Version.Major)
-                        {
-                            sortedNewReleases.Add(latestGARelease);
-                        }
-                    }
-
-                    sortedNewReleases = [..sortedNewReleases
-                        .OrderByDescending(o => o.Version)
-                        .ThenByDescending(o => o.Id)];
-
-                    // Process new list and trim the releases used for comparison
-                    await ProcessReleases(sortedNewReleases, sortedMajorReleasesDictionary, repo, true);
-                }
-
-                // Process new Aspire releases in diff mode
-                if (aspireDiff.Count != 0)
-                {
-                    _logger.Info($"\nProcessing Aspire diffs... - {aspireDiff.Count}");
-                    await ProcessAspireReleases(aspireDiff, sortedMajorReleasesDictionary);
-                }
-
-                // Process new MAUI releases in diff mode
-                if (mauiDiff.Count != 0)
-                {
-                    _logger.Info($"\nProcessing MAUI diffs... - {mauiDiff.Count}");
-                    await ProcessMauiReleases(mauiDiff, sortedMajorReleasesDictionary);
-                }
-
-                // Write updated file if any changes were made
-                if (diff.Count != 0 || aspireDiff.Count != 0 || mauiDiff.Count != 0)
-                {
-                    sortedMajorReleasesList = [.. sortedMajorReleasesDictionary.Values.OrderByDescending(o => o.Version)];
-
-                    File.WriteAllText($"./{repo}.json", JsonSerializer.Serialize(sortedMajorReleasesList, _jsonOptions));
-                }
-                else
-                {
-                    _logger.Info("The current releases list is up to date with core.js\nExiting...");
-                }
+                await ProcessDiffModeAsync(
+                    gitHubService,
+                    contributorService,
+                    sortedReleases,
+                    sortedAspireReleases,
+                    sortedMauiReleases,
+                    majorReleasesDictionary,
+                    repo);
             }
             else
             {
-                // create a dictionary for major versions
-                foreach (var release in sortedReleases)
-                {
-                    if (!sortedMajorReleasesDictionary.ContainsKey($"{release.Version.Major}.{release.Version.Minor}"))
-                    {
-                        var majorRelease = new MajorRelease
-                        {
-                            Contributions = 0,
-                            Contributors = [],
-                            Product = release.Product,
-                            Name = $"{release.Product} {release.Version.Major}.{release.Version.Minor}",
-                            Version = release.Version,
-                            Tag = $"v{release.Version.Major}.{release.Version.Minor}",
-                            ProcessedReleases = []
-                        };
-                        sortedMajorReleasesDictionary.Add($"{release.Version.Major}.{release.Version.Minor}", majorRelease);
-                    }
-                }
-
-                _logger.Info($"Processing all releases...\n{repo} - {sortedReleases.Count}");
-
-                await ProcessReleases(sortedReleases, sortedMajorReleasesDictionary, repo);
-
-                // Process Aspire releases
-                _logger.Info($"\nProcessing Aspire releases... - {sortedAspireReleases.Count}");
-                await ProcessAspireReleases(sortedAspireReleases, sortedMajorReleasesDictionary);
-
-                // Process MAUI releases
-                _logger.Info($"\nProcessing MAUI releases... - {sortedMauiReleases.Count}");
-                await ProcessMauiReleases(sortedMauiReleases, sortedMajorReleasesDictionary);
-
-                sortedMajorReleasesList = [.. sortedMajorReleasesDictionary.Values];
-
-                File.WriteAllText($"./{repo}.json", JsonSerializer.Serialize(sortedMajorReleasesList, _jsonOptions));
+                await ProcessFullModeAsync(
+                    gitHubService,
+                    contributorService,
+                    sortedReleases,
+                    sortedAspireReleases,
+                    sortedMauiReleases,
+                    majorReleasesDictionary,
+                    repo);
             }
         }
 
-        private static List<Release> GetLatestExternalReleases(List<Release> releases, Func<string, int> versionMapper)
+        /// <summary>
+        /// Process all releases from scratch (full mode).
+        /// </summary>
+        private static async Task ProcessFullModeAsync(
+            IGitHubService gitHubService,
+            IContributorService contributorService,
+            List<Release> sortedReleases,
+            List<Release> sortedAspireReleases,
+            List<Release> sortedMauiReleases,
+            Dictionary<string, MajorRelease> majorReleasesDictionary,
+            string repo)
         {
-            // Group by .NET version mapping and take the first (newest) release for each
-            var latestReleases = new List<Release>();
-            var processedVersions = new HashSet<int>();
+            // Initialize dictionary for major versions
+            InitializeMajorReleasesDictionary(sortedReleases, majorReleasesDictionary);
 
+            _logger.Info($"Processing all releases...\n{repo} - {sortedReleases.Count}");
+
+            // Process core releases using ContributorService
+            await contributorService.ProcessReleasesAsync(sortedReleases, majorReleasesDictionary, repo);
+
+            // Process Aspire releases
+            _logger.Info($"\nProcessing Aspire releases... - {sortedAspireReleases.Count}");
+            await ProcessExternalReleasesAsync(
+                gitHubService, sortedAspireReleases, majorReleasesDictionary, 
+                "aspire", VersionMapper.MapAspireVersionToDotNet);
+
+            // Process MAUI releases
+            _logger.Info($"\nProcessing MAUI releases... - {sortedMauiReleases.Count}");
+            await ProcessExternalReleasesAsync(
+                gitHubService, sortedMauiReleases, majorReleasesDictionary, 
+                "maui", VersionMapper.MapMauiVersionToDotNet);
+
+            // Write results
+            var sortedList = majorReleasesDictionary.Values.ToList();
+            File.WriteAllText($"./{repo}.json", JsonSerializer.Serialize(sortedList, _jsonOptions));
+            _logger.Info($"\nResults written to ./{repo}.json");
+        }
+
+        /// <summary>
+        /// Process only new releases since the last run (diff mode).
+        /// </summary>
+        private static async Task ProcessDiffModeAsync(
+            IGitHubService gitHubService,
+            IContributorService contributorService,
+            List<Release> sortedReleases,
+            List<Release> sortedAspireReleases,
+            List<Release> sortedMauiReleases,
+            Dictionary<string, MajorRelease> majorReleasesDictionary,
+            string repo)
+        {
+            // Load current core.json using GitHubService
+            var coreJson = await gitHubService.LoadCoreJsonAsync();
+            if (coreJson == null || !coreJson.Any())
+            {
+                _logger.Error("Failed to load core.json. Cannot run in diff mode.");
+                return;
+            }
+
+            // Initialize dictionary with existing data
+            foreach (var release in coreJson)
+            {
+                majorReleasesDictionary[$"{release.Version.Major}.{release.Version.Minor}"] = release;
+            }
+
+            // Collect processed releases
+            var processedReleases = coreJson.SelectMany(o => o.ProcessedReleases).ToList();
+
+            // Find new releases
+            var coreDiff = sortedReleases.Where(o => !processedReleases.Contains(o.Tag)).ToList();
+            var aspireDiff = sortedAspireReleases.Where(r => !processedReleases.Contains($"aspire-{r.Tag}")).ToList();
+            var mauiDiff = sortedMauiReleases.Where(r => !processedReleases.Contains($"maui-{r.Tag}")).ToList();
+
+            bool hasChanges = false;
+
+            // Process new core releases
+            if (coreDiff.Count > 0)
+            {
+                hasChanges = true;
+                _logger.Info($"Processing diffs in releases...\n{repo} - {coreDiff.Count}");
+
+                // Add missing major versions
+                foreach (var release in coreDiff)
+                {
+                    var key = $"{release.Version.Major}.{release.Version.Minor}";
+                    if (!majorReleasesDictionary.ContainsKey(key))
+                    {
+                        majorReleasesDictionary.Add(key, CreateMajorRelease(release));
+                    }
+                }
+
+                // Build release list with previous versions for comparison
+                var sortedNewReleases = BuildDiffReleaseList(coreDiff, sortedReleases);
+                await contributorService.ProcessReleasesAsync(sortedNewReleases, majorReleasesDictionary, repo, isDiff: true);
+            }
+
+            // Process new Aspire releases
+            if (aspireDiff.Count > 0)
+            {
+                hasChanges = true;
+                _logger.Info($"\nProcessing Aspire diffs... - {aspireDiff.Count}");
+                await ProcessExternalReleasesAsync(
+                    gitHubService, aspireDiff, majorReleasesDictionary, 
+                    "aspire", VersionMapper.MapAspireVersionToDotNet);
+            }
+
+            // Process new MAUI releases
+            if (mauiDiff.Count > 0)
+            {
+                hasChanges = true;
+                _logger.Info($"\nProcessing MAUI diffs... - {mauiDiff.Count}");
+                await ProcessExternalReleasesAsync(
+                    gitHubService, mauiDiff, majorReleasesDictionary, 
+                    "maui", VersionMapper.MapMauiVersionToDotNet);
+            }
+
+            if (hasChanges)
+            {
+                var sortedList = majorReleasesDictionary.Values.OrderByDescending(o => o.Version).ToList();
+                File.WriteAllText($"./{repo}.json", JsonSerializer.Serialize(sortedList, _jsonOptions));
+                _logger.Info($"\nResults written to ./{repo}.json");
+            }
+            else
+            {
+                _logger.Info("The current releases list is up to date with core.json\nExiting...");
+            }
+        }
+
+        /// <summary>
+        /// Initialize major releases dictionary from sorted releases.
+        /// </summary>
+        private static void InitializeMajorReleasesDictionary(
+            List<Release> releases, 
+            Dictionary<string, MajorRelease> dictionary)
+        {
             foreach (var release in releases)
             {
-                int dotnetVersion = versionMapper(release.Tag);
-                if (dotnetVersion == -1)
+                var key = $"{release.Version.Major}.{release.Version.Minor}";
+                if (!dictionary.ContainsKey(key))
                 {
-                    continue;
-                }
-
-                if (!processedVersions.Contains(dotnetVersion))
-                {
-                    latestReleases.Add(release);
-                    processedVersions.Add(dotnetVersion);
+                    dictionary.Add(key, CreateMajorRelease(release));
                 }
             }
-
-            return latestReleases;
         }
 
-#nullable enable
-        private static async Task ProcessReleases(List<Release> releases, Dictionary<string, MajorRelease> majorReleasesDict, string repo, bool isDiff = false)
+        /// <summary>
+        /// Create a new MajorRelease from a Release.
+        /// </summary>
+        private static MajorRelease CreateMajorRelease(Release release) => new()
         {
-            // dotnet/core
-            Release currentRelease;
-            Release previousRelease;
-            for (int i = 0; i < releases.Count; i++)
+            Contributions = 0,
+            Contributors = [],
+            Product = release.Product,
+            Name = $"{release.Product} {release.Version.Major}.{release.Version.Minor}",
+            Version = release.Version,
+            Tag = $"v{release.Version.Major}.{release.Version.Minor}",
+            ProcessedReleases = []
+        };
+
+        /// <summary>
+        /// Build a list of releases including previous versions needed for diff comparison.
+        /// </summary>
+        private static List<Release> BuildDiffReleaseList(List<Release> newReleases, List<Release> allReleases)
+        {
+            var result = new List<Release>();
+            var latestGARelease = allReleases.Find(r => r.IsGA);
+
+            foreach (var release in newReleases)
             {
-                currentRelease = releases[i];
-                majorReleasesDict.TryGetValue($"{currentRelease.Version.Major}.{currentRelease.Version.Minor}", out var majorRelease);
+                var idx = allReleases.IndexOf(release);
 
-                // Add the first release to the list of processed releases so diff does not pick it up
-                if (i == releases.Count - 1)
+                if (idx == allReleases.Count - 1)
                 {
-                    if (!isDiff)
-                    {
-                        majorRelease?.ProcessedReleases.Add(currentRelease.Tag);
-                    }
-                    break;
-                }
-
-                previousRelease = GetPreviousRelease(releases, currentRelease, i + 1);
-
-                if (previousRelease is null)
-                {
-                    // Is this the first release?
-                    _logger.Info($"{currentRelease.Tag} is the first release in the series.");
-                    //Debugger.Break();
+                    result.Add(release);
                     continue;
                 }
 
-                majorRelease?.ProcessedReleases.Add(currentRelease.Tag);
+                var previousVersion = allReleases[idx + 1];
+                result.Add(release);
 
-                _logger.LogVersionProcessing(repo, previousRelease.Tag, currentRelease.Tag);
-
-                // for each child repo get commits and count contribs
-                foreach (var repoCurrentRelease in currentRelease.ChildRepos)
+                if (!newReleases.Contains(previousVersion))
                 {
-                    var repoPrevRelease = previousRelease.ChildRepos.FirstOrDefault(r => r.Owner == repoCurrentRelease.Owner &&
-                                                                                         r.Repository == repoCurrentRelease.Repository);
-                    if (repoPrevRelease is null)
+                    if (release.Version.Major != previousVersion.Version.Major)
                     {
-                        // This may happen
-                        _logger.LogValidationError(repoCurrentRelease.Url, $"doesn't exist in {previousRelease.Tag}");
-                        continue;
+                        if (latestGARelease != null && !result.Contains(latestGARelease))
+                            result.Add(latestGARelease);
                     }
-
-                    Debug.WriteLine($"{repoCurrentRelease.Tag} : {repoCurrentRelease.Name}");
-
-                    try
+                    else if (!result.Contains(previousVersion))
                     {
-                        _logger.Debug($"Processing: {repoCurrentRelease.Name}: {repoPrevRelease.Tag}..{repoCurrentRelease.Tag}");
-
-                        if (repoPrevRelease.Tag != repoCurrentRelease.Tag)
-                        {
-                            var releaseDiff = await LoadCommitsForReleasesAsync(repoPrevRelease.Tag,
-                                                                                repoCurrentRelease.Tag,
-                                                                                repoCurrentRelease.Owner,
-                                                                                repoCurrentRelease.Repository);
-                            if (releaseDiff is null || releaseDiff.Count < 1)
-                            {
-                                //Debugger.Break();
-                                continue;
-                            }
-
-                            if (majorRelease is not null)
-                            {
-                                majorRelease.Contributions += releaseDiff.Count;
-                                TallyCommits(majorRelease, repoCurrentRelease.Repository, releaseDiff);
-                            }
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.Error(ex);
+                        result.Add(previousVersion);
                     }
                 }
-
-                if (Environment.GetEnvironmentVariable("TEST") == "1")
+                else if (release.Version.Major != previousVersion.Version.Major && latestGARelease != null)
                 {
-                    break;
+                    if (!result.Contains(latestGARelease))
+                        result.Add(latestGARelease);
                 }
             }
+
+            return result
+                .OrderByDescending(o => o.Version)
+                .ThenByDescending(o => o.Id)
+                .ToList();
         }
 
-        private static async Task ProcessExternalReleases(
+        /// <summary>
+        /// Process external product releases (Aspire, MAUI) using GitHubService.
+        /// </summary>
+        private static async Task ProcessExternalReleasesAsync(
+            IGitHubService gitHubService,
             List<Release> releases,
             Dictionary<string, MajorRelease> majorReleasesDict,
             string repoName,
             Func<string, int> versionMapper)
         {
-            Release currentRelease;
-            Release previousRelease;
-
             for (int i = 0; i < releases.Count; i++)
             {
-                currentRelease = releases[i];
+                var currentRelease = releases[i];
 
-                // Map version to .NET version
                 int dotnetMajor = versionMapper(currentRelease.Tag);
                 if (dotnetMajor == -1)
                 {
-                    _logger.LogSkip($"{repoName} {currentRelease.Tag}", "does not map to .NET 8, 9, or 10");
+                    _logger.LogSkip($"{repoName} {currentRelease.Tag}", "does not map to a supported .NET version");
                     continue;
                 }
 
-                // Get the .NET major release to add contributors to
-                majorReleasesDict.TryGetValue($"{dotnetMajor}.{0}", out var majorRelease);
+                majorReleasesDict.TryGetValue($"{dotnetMajor}.0", out var majorRelease);
                 if (majorRelease == null)
                 {
                     _logger.Error($".NET {dotnetMajor}.0 not found in dictionary for {repoName} {currentRelease.Tag}");
                     continue;
                 }
 
-                // Skip if this is the last release (no previous to compare against)
                 if (i == releases.Count - 1)
                 {
-                    // Add to processed releases for the last release
-                    string releaseTag = $"{repoName.ToLower()}-{currentRelease.Tag}";
-                    majorRelease.ProcessedReleases.Add(releaseTag);
+                    majorRelease.ProcessedReleases.Add($"{repoName.ToLower()}-{currentRelease.Tag}");
                     break;
                 }
 
-                previousRelease = releases[i + 1];
-
-                // Add to processed releases
-                string processedReleaseTag = $"{repoName.ToLower()}-{currentRelease.Tag}";
-                majorRelease.ProcessedReleases.Add(processedReleaseTag);
+                var previousRelease = releases[i + 1];
+                majorRelease.ProcessedReleases.Add($"{repoName.ToLower()}-{currentRelease.Tag}");
 
                 _logger.LogVersionProcessing($"{repoName.ToLower()} -> .NET {dotnetMajor}.0", previousRelease.Tag, currentRelease.Tag);
 
                 try
                 {
-                    var releaseDiff = await LoadCommitsForReleasesAsync(previousRelease.Tag,
-                                                                        currentRelease.Tag,
-                                                                        "dotnet",
-                                                                        repoName.ToLower());
-                    if (releaseDiff is null || releaseDiff.Count < 1)
-                    {
-                        continue;
-                    }
+                    var commits = await gitHubService.CompareCommitsAsync(
+                        "dotnet", repoName.ToLower(), previousRelease.Tag, currentRelease.Tag);
 
-                    majorRelease.Contributions += releaseDiff.Count;
-                    TallyCommits(majorRelease, repoName.ToLower(), releaseDiff);
+                    if (commits == null || commits.Count < 1)
+                        continue;
+
+                    majorRelease.Contributions += commits.Count;
+                    TallyCommits(majorRelease, repoName.ToLower(), commits);
                 }
                 catch (Exception ex)
                 {
@@ -428,265 +342,60 @@ namespace dotnetthanks_loader
             }
         }
 
-        private static async Task ProcessAspireReleases(List<Release> aspireReleases, Dictionary<string, MajorRelease> majorReleasesDict)
-        {
-            await ProcessExternalReleases(aspireReleases, majorReleasesDict, "aspire", VersionMapper.MapAspireVersionToDotNet);
-        }
-
-        private static async Task ProcessMauiReleases(List<Release> mauiReleases, Dictionary<string, MajorRelease> majorReleasesDict)
-        {
-            await ProcessExternalReleases(mauiReleases, majorReleasesDict, "maui", VersionMapper.MapMauiVersionToDotNet);
-        }
-
-#nullable disable
-
         /// <summary>
-        /// Find the previous release for the current release in the sorted collection of all releases.
-        /// Take the immediate previous release it it has the same major.minor version (e.g. 5.0.0-RC1 for 5.0.0-RC2),
-        /// or take the previous GA release (e.g. 3.0.0 for 5.0.0-preview2 not 3.1.10).
+        /// Tally commits for contributors (used for external releases).
         /// </summary>
-        /// <param name="index">The index of the <paramref name="currentRelease"/> in the <paramref name="sortedReleases"/> list.</param>
-        /// <returns>The previous release, if found; otherwise <see cref="null"/>, if the current release if the first release.</returns>
-        private static Release GetPreviousRelease(List<Release> sortedReleases, Release currentRelease, int index)
-        {
-            if (currentRelease.Version.Major == sortedReleases[index].Version.Major &&
-                currentRelease.Version.Minor == sortedReleases[index].Version.Minor)
-            {
-                return sortedReleases[index];
-            }
-
-            return sortedReleases.Skip(index).FirstOrDefault(r => currentRelease.Version > r.Version && r.IsGA);
-        }
-
         private static void TallyCommits(MajorRelease majorRelease, string repoName, List<MergeBaseCommit> commits)
         {
-            // these the commits within the release
             foreach (var item in commits)
             {
-                if (item.author != null)
+                if (item.author == null) continue;
+
+                var author = item.author;
+                author.name = item.commit.author.name;
+
+                if (string.IsNullOrEmpty(author.name))
+                    author.name = "Unknown";
+
+                if (BotExclusionConstants.IsBot(author.name))
+                    continue;
+
+                // Find by Link first
+                var person = majorRelease.Contributors.Find(p => p.Link == author.html_url);
+                
+                // If not found by Link and we have a valid Link, try to find by Name (to merge with null-Link entries)
+                if (person == null && !string.IsNullOrEmpty(author.html_url))
                 {
-                    var author = item.author;
-                    author.name = item.commit.author.name;
-
-                    if (string.IsNullOrEmpty(author.name))
+                    person = majorRelease.Contributors.Find(p => p.Link == null && p.Name == author.name);
+                    if (person != null)
                     {
-                        author.name = "Unknown";
-                    }
-
-                    if (!BotExclusionConstants.IsBot(author.name))
-                    {
-                        // find if the author has been counted
-                        var person = majorRelease.Contributors.Find(p => p.Link == author.html_url);
-                        if (person == null)
-                        {
-                            person = new Contributor()
-                            {
-                                Name = author.name,
-                                Link = author.html_url,
-                                Avatar = author.avatar_url,
-                                Count = 1
-                            };
-                            person.Repos.Add(new RepoItem() { Name = repoName, Count = 1 });
-
-                            majorRelease.Contributors.Add(person);
-                        }
-                        else
-                        {
-                            // found the author, does the repo exist as well?
-                            person.Count += 1;
-
-                            var repoItem = person.Repos.Find(r => r.Name == repoName);
-                            if (repoItem == null)
-                            {
-                                person.Repos.Add(new RepoItem() { Name = repoName, Count = 1 });
-                            }
-                            else
-                            {
-                                repoItem.Count += 1;
-                            }
-                        }
+                        // Backfill the missing GitHub info
+                        person.Link = author.html_url;
+                        person.Avatar = author.avatar_url;
                     }
                 }
-
-            }
-        }
-
-        private static async Task<IEnumerable<Release>> LoadReleasesAsync(string owner, string repo)
-        {
-            var results = await _ghclient.Repository.Release.GetAll(owner, repo);
-
-            return results.Select(release => new Release
-            {
-                Name = release.Name,
-                Tag = release.TagName,
-                Id = release.Id,
-                ChildRepos = ParseReleaseBody(release.Body),
-                Contributors = []
-            });
-        }
-
-        private static List<ChildRepo> ParseReleaseBody(string body)
-        {
-            var results = new List<ChildRepo>();
-
-            var pattern = "\\[(.+)\\]\\(([^ ]+?)( \"(.+)\")?\\)";
-            var rg = new Regex(pattern, RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.Multiline);
-            var match = rg.Match(body);
-
-            while (match.Success)
-            {
-                var name = match.Groups[1]?.Value.Trim();
-                var url = match.Groups[2]?.Value.Trim();
-                if (url.Contains("/tag/"))
+                
+                if (person == null)
                 {
-                    results.Add(new ChildRepo() { Name = name, Url = url });
-                }
-
-                match = match.NextMatch();
-            }
-
-            return results;
-        }
-
-        private static async Task<List<MergeBaseCommit>> LoadCommitsForReleasesAsync(string fromRelease, string toRelease, string owner, string repo)
-        {
-            try
-            {
-                // First call to check total commits
-                var initialComparison = await _ghclient.Repository.Commit.Compare(owner, repo, fromRelease, toRelease);
-
-                var allCommits = new List<GitHubCommit>();
-
-                if (initialComparison.TotalCommits > 300)
-                {
-                    _logger.Debug($"{fromRelease}..{toRelease} has {initialComparison.TotalCommits} total commits, paging through all commits...");
-
-                    // Calculate number of pages needed (300 commits per page)
-                    var totalPages = (int)Math.Ceiling((double)initialComparison.TotalCommits / 300);
-
-                    // Get all commits by paging through
-                    for (int page = 1; page <= totalPages; page++)
+                    person = new Contributor
                     {
-                        var options = new ApiOptions
-                        {
-                            PageSize = 300,
-                            PageCount = 1,
-                            StartPage = page
-                        };
-
-                        var pagedComparison = await _ghclient.Repository.Commit.Compare(owner, repo, fromRelease, toRelease, options);
-                        allCommits.AddRange(pagedComparison.Commits);
-
-                        _logger.Debug($"Loaded page {page}/{totalPages} ({pagedComparison.Commits.Count()} commits)");
-                    }
+                        Name = author.name,
+                        Link = author.html_url,
+                        Avatar = author.avatar_url,
+                        Count = 1
+                    };
+                    person.Repos.Add(new RepoItem { Name = repoName, Count = 1 });
+                    majorRelease.Contributors.Add(person);
                 }
                 else
                 {
-                    // Use commits from initial comparison if under 300
-                    allCommits.AddRange(initialComparison.Commits);
+                    person.Count += 1;
+                    var repoItem = person.Repos.Find(r => r.Name == repoName);
+                    if (repoItem == null)
+                        person.Repos.Add(new RepoItem { Name = repoName, Count = 1 });
+                    else
+                        repoItem.Count += 1;
                 }
-
-                // Filter out merge commits (commits with more than 1 parent)
-                var individualCommits = allCommits.Where(c => c.Parents.Count() <= 1);
-
-                // Log filtering results
-                var totalCommits = allCommits.Count();
-                var filteredCommits = individualCommits.Count();
-                var mergeCommits = totalCommits - filteredCommits;
-
-                if (mergeCommits > 0)
-                {
-                    _logger.Debug($"Filtered {mergeCommits} merge commits, counting {filteredCommits} individual commits");
-                }
-
-                // Convert filtered commits to your MergeBaseCommit format
-                return individualCommits
-                .Select(c => new MergeBaseCommit
-                {
-                    sha = c.Sha,
-                    author = new Author
-                    {
-                        name = c.Commit.Author?.Name,
-                        html_url = c.Author?.HtmlUrl,
-                        avatar_url = c.Author?.AvatarUrl
-                    },
-                    commit = new Commit
-                    {
-                        author = new Author { name = c.Commit.Author?.Name }
-                    }
-                })
-                .Where(c => !string.IsNullOrEmpty(c.author.name) && !BotExclusionConstants.IsBot(c.author.name) && !c.author.name.ToLower().Contains("[bot]"))
-                .ToList();
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, $"Compare {fromRelease}...{toRelease}");
-                return null;
-            }
-        }
-
-        private static List<MajorRelease> LoadCurrentCoreJson()
-        {
-            try
-            {
-                string fileName = "core.json";
-                string jsonString = File.ReadAllText(fileName);
-                var corejson = JsonSerializer.Deserialize<List<MajorRelease>>(jsonString);
-                return corejson;
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, "Failed to load core.json");
-            }
-
-            return null;
-        }
-
-        private static async Task<List<MajorRelease>> LoadCurrentCoreJsonAsync()
-        {
-            var url = "https://dotnet.microsoft.com/blob-assets/json/thanks/core.json";
-
-            try
-            {
-                var response = await _client.GetFromJsonAsync<List<MajorRelease>>(url);
-                return response;
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, "Failed to load core.json from URL");
-            }
-
-            return null;
-        }
-
-        private static async Task<T> ExecuteWithRateLimitHandling<T>(Func<Task<T>> operation)
-        {
-            var remainingRetries = 3;
-        Retry:
-            try
-            {
-                return await operation();
-            }
-            catch (Exception ex) when (remainingRetries > 0)
-            {
-                if (ex.Message.Contains("403"))
-                {
-                    string url = "https://api.github.com/rate_limit";
-                    var limit = await _client.GetStringAsync(url);
-                    var response = JsonSerializer.Deserialize<RateLimit>(limit);
-                    var resetTime = DateTimeOffset.FromUnixTimeSeconds(response.rate.reset);
-                    var delay = resetTime - DateTimeOffset.UtcNow + TimeSpan.FromMinutes(1);
-                    var until = DateTime.Now.Add(delay);
-                    _logger.LogRateLimit(delay.TotalMinutes, until);
-                    await Task.Delay(delay);
-                    remainingRetries--;
-                    goto Retry;
-                }
-                else
-                {
-                    return await Task.FromException<T>(ex);
-                }
-
             }
         }
     }

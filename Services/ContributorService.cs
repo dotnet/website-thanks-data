@@ -148,8 +148,21 @@ namespace dotnetthanks_loader
 
                     if (!BotExclusionConstants.IsBot(author.name))
                     {
-                        // find if the author has been counted
+                        // find if the author has been counted by Link first
                         var person = majorRelease.Contributors.Find(p => p.Link == author.html_url);
+                        
+                        // If not found by Link and we have a valid Link, try to find by Name (to merge with null-Link entries)
+                        if (person == null && !string.IsNullOrEmpty(author.html_url))
+                        {
+                            person = majorRelease.Contributors.Find(p => p.Link == null && p.Name == author.name);
+                            if (person != null)
+                            {
+                                // Backfill the missing GitHub info
+                                person.Link = author.html_url;
+                                person.Avatar = author.avatar_url;
+                            }
+                        }
+                        
                         if (person == null)
                         {
                             person = new Contributor()
