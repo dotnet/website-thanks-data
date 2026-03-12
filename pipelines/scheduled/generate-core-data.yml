@@ -6,8 +6,8 @@ name: $(date:yyyyMMdd)$(rev:.r)
 
 # This pipeline runs on schedule to generate core.json data
 schedules:
-  - cron: "0 19 8-14 * Tue"
-    displayName: "Run second Tuesday each month at 19:00 UTC"
+  - cron: "0 1 9-15 * Tue"
+    displayName: "Run second Tuesday each month at 17:00 PST (01:00 UTC Tue)"
     branches:
       include:
         - main
@@ -21,11 +21,11 @@ resources:
     - repository: self
       type: git
       ref: main
-      
+
     - repository: 1ESPipelineTemplates
       type: git
       name: 1ESPipelineTemplates/1ESPipelineTemplates
-      ref: refs/tags/release 
+      ref: refs/tags/release
 
 extends:
   template: v1/1ES.Official.PipelineTemplate.yml@1ESPipelineTemplates
@@ -39,7 +39,7 @@ extends:
     stages:
       - stage: thanks_data
         displayName: 'Generate Thanks Data Stage'
-        jobs:  
+        jobs:
           - job: ProcessThanksData
             displayName: 'Generate .NET Thanks Data'
             timeoutInMinutes: 1440
@@ -69,7 +69,7 @@ extends:
                   targetType: 'inline'
                   script: |
                     set +e  # Don't exit on error
-                    
+
                     handle_failure() {
                       echo "WARNING: $1"
                       echo "##vso[task.setvariable variable=PREPARATION_SUCCEEDED]false"
@@ -79,21 +79,21 @@ extends:
                     echo "$GITHUB_TOKEN"
                     dotnet user-secrets init
                     [ $? -ne 0 ] && handle_failure "Failed to initialize user secrets"
-                    
+
                     dotnet user-secrets set GITHUB_CLIENTID "$GITHUB_CLIENTID"
                     dotnet user-secrets set GITHUB_CLIENTSECRET "$GITHUB_CLIENTSECRET"
                     dotnet user-secrets set GITHUB_TOKEN "$GITHUB_TOKEN"
-                    
+
                     dotnet restore
                     [ $? -ne 0 ] && handle_failure "Failed to restore packages"
-                    
+
                     dotnet build --configuration Release
                     [ $? -ne 0 ] && handle_failure "Build failed"
-                    
+
                     echo "Preparation completed successfully"
                     echo "##vso[task.setvariable variable=PREPARATION_SUCCEEDED]true"
                     exit 0
-              
+
               - task: Bash@3
                 displayName: 'Run .NET Thanks Data Tool'
                 condition: eq(variables['PREPARATION_SUCCEEDED'], 'true')
@@ -102,15 +102,15 @@ extends:
                 inputs:
                   targetType: 'inline'
                   script: |
-                    set -euo pipefail 
+                    set -euo pipefail
 
                     timeout 86400 dotnet run --project dotnetthanks-loader.csproj --configuration Release diff
- 
+
                     if [ -f "core.json" ]; then
                       echo "Generated core.json"
                       echo "##vso[task.setvariable variable=HAS_CORE_JSON]true"
                       echo "##vso[task.complete result=Succeeded]"
-                      
+
                       # Store the absolute path to core.json for later use
                       core_json_path="$(pwd)/core.json"
                       echo "##vso[task.setvariable variable=CORE_JSON_PATH]$core_json_path"
@@ -143,9 +143,9 @@ extends:
                   targetType: 'inline'
                   script: |
                     set -euo pipefail
-                    
+
                     cd dotnet-website
-                    
+
                     # Configure git
                     git config --global user.email "bot@azuredevops.com"
                     git config --global user.name "azure-pipelines"
@@ -164,13 +164,13 @@ extends:
                     target_dir="website-resources/blob-assets/json/thanks"
                     echo "Source file: $CORE_JSON_PATH"
                     echo "Target directory: $target_dir"
-                    
+
                     # Verify source file exists
                     if [ ! -f "$CORE_JSON_PATH" ]; then
                         echo "Source file not found: $CORE_JSON_PATH"
                         exit 1
                     fi
-                    
+
                     # Create target directory and copy file
                     mkdir -p "$target_dir"
                     cp "$CORE_JSON_PATH" "$target_dir/core.json"
@@ -178,20 +178,20 @@ extends:
 
                     # Stage changes
                     git add "website-resources/blob-assets/json/thanks/core.json"
-                    
+
                     # Check if there are changes to commit
                     if git diff --cached --quiet; then
                         echo "No changes to commit"
                         exit 0
                     fi
-                    
+
                     # Commit and push
                     git commit -m "Update .NET thanks data"
                     git push origin "HEAD:$branch"
 
                     echo "##vso[task.setvariable variable=BRANCH_NAME]$branch"
-                    echo "Branch '$branch' created and pushed successfully" 
-              
+                    echo "Branch '$branch' created and pushed successfully"
+
               - task: Bash@3
                 displayName: 'Create PR for .NET Thanks Data Update'
                 condition: eq(variables['HAS_CORE_JSON'], 'true')
@@ -203,12 +203,12 @@ extends:
                   targetType: 'inline'
                   script: |
                     set -euo pipefail
-                    
+
                     CURR_MONTH=$(date -u +%B)
                     CURR_YEAR=$(date -u +%Y)
-                    
+
                     cd dotnet-website
-                    
+
                     gh pr create \
                       --repo dotnet/website \
                       --base main \
