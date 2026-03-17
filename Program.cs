@@ -12,6 +12,9 @@ namespace dotnetthanks_loader
             Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
         };
 
+        // Best practice: static readonly singleton to avoid socket exhaustion
+        private static readonly HttpClient _httpClient = new();
+
         static async Task Main(string[] args)
         {
             var config = new ConfigurationBuilder()
@@ -21,23 +24,27 @@ namespace dotnetthanks_loader
                 .Build();
 
             // Initialize services
-            var httpClient = new HttpClient();
-            var gitHubService = new GitHubService(config, httpClient, _logger);
+            var gitHubService = new GitHubService(config, _httpClient, _logger);
             var contributorService = new ContributorService(gitHubService, _logger);
 
             var repo = "core";
             var owner = "dotnet";
 
-            // Load all releases using GitHubService
+            // Load all releases using GitHubService in parallel
             _logger.Info("Loading releases...");
-            var allReleases = await gitHubService.GetReleasesAsync(owner, repo);
+            var allReleasesTask = gitHubService.GetReleasesAsync(owner, repo);
+            var aspireReleasesTask = gitHubService.GetReleasesAsync("dotnet", "aspire");
+            var mauiReleasesTask = gitHubService.GetReleasesAsync("dotnet", "maui");
+
+            await Task.WhenAll(allReleasesTask, aspireReleasesTask, mauiReleasesTask);
+
+            var allReleases = allReleasesTask.Result;
+            var aspireReleases = aspireReleasesTask.Result;
+            var mauiReleases = mauiReleasesTask.Result;
 
             _logger.LogReleaseLoading("Aspire");
-            var aspireReleases = await gitHubService.GetReleasesAsync("dotnet", "aspire");
             _logger.LogReleaseLoading("Aspire", aspireReleases.Count());
-
             _logger.LogReleaseLoading("MAUI");
-            var mauiReleases = await gitHubService.GetReleasesAsync("dotnet", "maui");
             _logger.LogReleaseLoading("MAUI", mauiReleases.Count());
 
             // Sort releases from newest to oldest
