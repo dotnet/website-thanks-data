@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 
@@ -6,14 +7,11 @@ namespace dotnetthanks_loader
 {
     class Program
     {
-        private static readonly ILoggingService _logger = Logger.Instance;
+        private static ILoggingService _logger = Logger.Instance;
         private static readonly JsonSerializerOptions _jsonOptions = new()
         {
             Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
         };
-
-        // Best practice: static readonly singleton to avoid socket exhaustion
-        private static readonly HttpClient _httpClient = new();
 
         static async Task Main(string[] args)
         {
@@ -23,9 +21,21 @@ namespace dotnetthanks_loader
                 .AddUserSecrets<Program>()
                 .Build();
 
-            // Initialize services
-            var gitHubService = new GitHubService(config, _httpClient, _logger);
-            var contributorService = new ContributorService(gitHubService, _logger);
+            // Configure DI container
+            var services = new ServiceCollection();
+            services.AddSingleton<IConfiguration>(config);
+            services.AddSingleton<HttpClient>();
+            services.AddSingleton<ILoggingService, ConsoleLoggingService>();
+            services.AddSingleton<IGitHubService, GitHubService>();
+            services.AddSingleton<IContributorService, ContributorService>();
+
+            var serviceProvider = services.BuildServiceProvider();
+
+            // Resolve services
+            _logger = serviceProvider.GetRequiredService<ILoggingService>();
+            Logger.Instance = _logger;
+            var gitHubService = serviceProvider.GetRequiredService<IGitHubService>();
+            var contributorService = serviceProvider.GetRequiredService<IContributorService>();
 
             var repo = "core";
             var owner = "dotnet";
@@ -38,13 +48,11 @@ namespace dotnetthanks_loader
 
             await Task.WhenAll(allReleasesTask, aspireReleasesTask, mauiReleasesTask);
 
-            var allReleases = allReleasesTask.Result;
-            var aspireReleases = aspireReleasesTask.Result;
-            var mauiReleases = mauiReleasesTask.Result;
+            var allReleases = await allReleasesTask;
+            var aspireReleases = await aspireReleasesTask;
+            var mauiReleases = await mauiReleasesTask;
 
-            _logger.LogReleaseLoading("Aspire");
             _logger.LogReleaseLoading("Aspire", aspireReleases.Count());
-            _logger.LogReleaseLoading("MAUI");
             _logger.LogReleaseLoading("MAUI", mauiReleases.Count());
 
             // Sort releases from newest to oldest
@@ -111,13 +119,13 @@ namespace dotnetthanks_loader
             // Process Aspire releases
             _logger.Info($"\nProcessing Aspire releases... - {sortedAspireReleases.Count}");
             await ProcessExternalReleasesAsync(
-                gitHubService, sortedAspireReleases, majorReleasesDictionary, 
+                gitHubService, contributorService, sortedAspireReleases, majorReleasesDictionary,
                 "aspire", VersionMapper.MapAspireVersionToDotNet);
 
             // Process MAUI releases
             _logger.Info($"\nProcessing MAUI releases... - {sortedMauiReleases.Count}");
             await ProcessExternalReleasesAsync(
-                gitHubService, sortedMauiReleases, majorReleasesDictionary, 
+                gitHubService, contributorService, sortedMauiReleases, majorReleasesDictionary,
                 "maui", VersionMapper.MapMauiVersionToDotNet);
 
             // Write results
@@ -153,7 +161,7 @@ namespace dotnetthanks_loader
             }
 
             // Collect processed releases
-            var processedReleases = coreJson.SelectMany(o => o.ProcessedReleases).ToList();
+            var processedReleases = coreJson.SelectMany(o => o.ProcessedReleases).ToHashSet();
 
             // Find new releases
             var coreDiff = sortedReleases.Where(o => !processedReleases.Contains(o.Tag)).ToList();
@@ -189,7 +197,7 @@ namespace dotnetthanks_loader
                 hasChanges = true;
                 _logger.Info($"\nProcessing Aspire diffs... - {aspireDiff.Count}");
                 await ProcessExternalReleasesAsync(
-                    gitHubService, aspireDiff, majorReleasesDictionary, 
+                    gitHubService, contributorService, aspireDiff, majorReleasesDictionary,
                     "aspire", VersionMapper.MapAspireVersionToDotNet);
             }
 
@@ -199,7 +207,7 @@ namespace dotnetthanks_loader
                 hasChanges = true;
                 _logger.Info($"\nProcessing MAUI diffs... - {mauiDiff.Count}");
                 await ProcessExternalReleasesAsync(
-                    gitHubService, mauiDiff, majorReleasesDictionary, 
+                    gitHubService, contributorService, mauiDiff, majorReleasesDictionary,
                     "maui", VersionMapper.MapMauiVersionToDotNet);
             }
 
@@ -219,7 +227,7 @@ namespace dotnetthanks_loader
         /// Initialize major releases dictionary from sorted releases.
         /// </summary>
         private static void InitializeMajorReleasesDictionary(
-            List<Release> releases, 
+            List<Release> releases,
             Dictionary<string, MajorRelease> dictionary)
         {
             foreach (var release in releases)
@@ -297,6 +305,7 @@ namespace dotnetthanks_loader
         /// </summary>
         private static async Task ProcessExternalReleasesAsync(
             IGitHubService gitHubService,
+            IContributorService contributorService,
             List<Release> releases,
             Dictionary<string, MajorRelease> majorReleasesDict,
             string repoName,
@@ -322,86 +331,29 @@ namespace dotnetthanks_loader
 
                 if (i == releases.Count - 1)
                 {
-                    majorRelease.ProcessedReleases.Add($"{repoName.ToLower()}-{currentRelease.Tag}");
+                    majorRelease.ProcessedReleases.Add($"{repoName}-{currentRelease.Tag}");
                     break;
                 }
 
                 var previousRelease = releases[i + 1];
-                majorRelease.ProcessedReleases.Add($"{repoName.ToLower()}-{currentRelease.Tag}");
+                majorRelease.ProcessedReleases.Add($"{repoName}-{currentRelease.Tag}");
 
-                _logger.LogVersionProcessing($"{repoName.ToLower()} -> .NET {dotnetMajor}.0", previousRelease.Tag, currentRelease.Tag);
+                _logger.LogVersionProcessing($"{repoName} -> .NET {dotnetMajor}.0", previousRelease.Tag, currentRelease.Tag);
 
                 try
                 {
                     var commits = await gitHubService.CompareCommitsAsync(
-                        "dotnet", repoName.ToLower(), previousRelease.Tag, currentRelease.Tag);
+                        "dotnet", repoName, previousRelease.Tag, currentRelease.Tag);
 
                     if (commits == null || commits.Count < 1)
                         continue;
 
                     majorRelease.Contributions += commits.Count;
-                    TallyCommits(majorRelease, repoName.ToLower(), commits);
+                    contributorService.TallyCommits(majorRelease, repoName, commits);
                 }
                 catch (Exception ex)
                 {
                     _logger.Error(ex);
-                }
-            }
-        }
-
-        /// <summary>
-        /// Tally commits for contributors (used for external releases).
-        /// </summary>
-        private static void TallyCommits(MajorRelease majorRelease, string repoName, List<MergeBaseCommit> commits)
-        {
-            foreach (var item in commits)
-            {
-                if (item.author == null) continue;
-
-                var author = item.author;
-                author.name = item.commit.author.name;
-
-                if (string.IsNullOrEmpty(author.name))
-                    author.name = "Unknown";
-
-                if (BotExclusionConstants.IsBot(author.name))
-                    continue;
-
-                // Find by Link first
-                var person = majorRelease.Contributors.Find(p => p.Link == author.html_url);
-                
-                // If not found by Link and we have a valid Link, try to find by Name (to merge with null-Link entries)
-                if (person == null && !string.IsNullOrEmpty(author.html_url))
-                {
-                    person = majorRelease.Contributors.Find(p => p.Link == null && p.Name == author.name);
-                    if (person != null)
-                    {
-                        // Backfill the missing GitHub info
-                        person.Link = author.html_url;
-                        person.Avatar = author.avatar_url;
-                    }
-                }
-                
-                if (person == null)
-                {
-                    person = new Contributor
-                    {
-                        Name = author.name,
-                        Link = author.html_url,
-                        Avatar = author.avatar_url,
-                        Count = 1
-                    };
-                    person.Repos.Add(new RepoItem { Name = repoName, Count = 1 });
-                    majorRelease.Contributors.Add(person);
-                }
-                else
-                {
-                    person.Count += 1;
-                    var repoItem = person.Repos.Find(r => r.Name == repoName);
-                    if (repoItem == null)
-                        person.Repos.Add(new RepoItem { Name = repoName, Count = 1 });
-                    else
-                        repoItem.Count += 1;
                 }
             }
         }
