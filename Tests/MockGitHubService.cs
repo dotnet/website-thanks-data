@@ -134,6 +134,16 @@ namespace dotnetthanks_loader.Tests
             // Replace characters that are invalid in filenames
             return refName.Replace("/", "-").Replace("\\", "-").Replace(":", "-");
         }
+
+        public Task<IReadOnlyList<string>> ListDotnetDockerVersionFoldersAsync(string version)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task<IReadOnlyList<Octokit.GitHubCommit>> GetCommitsForPathAsync(string path)
+        {
+            throw new NotImplementedException();
+        }
     }
 
     /// <summary>

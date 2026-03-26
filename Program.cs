@@ -120,10 +120,82 @@ namespace dotnetthanks_loader
                 gitHubService, sortedMauiReleases, majorReleasesDictionary, 
                 "maui", VersionMapper.MapMauiVersionToDotNet);
 
+            // Process dotnet-docker contributions for .NET 10
+            _logger.Info("\nProcessing dotnet-docker contributions for .NET 10...");
+            await ProcessDotnetDockerContributionsAsync(gitHubService, majorReleasesDictionary);
+
             // Write results
             var sortedList = majorReleasesDictionary.Values.ToList();
             File.WriteAllText($"./{repo}.json", JsonSerializer.Serialize(sortedList, _jsonOptions));
             _logger.Info($"\nResults written to ./{repo}.json");
+        }
+
+        /// <summary>
+        /// Process dotnet-docker repo contributions for .NET 10
+        /// </summary>
+        private static async Task ProcessDotnetDockerContributionsAsync(
+            IGitHubService gitHubService,
+            Dictionary<string, MajorRelease> majorReleasesDictionary)
+        {
+            // For each .NET version in majorReleasesDictionary, enumerate src/*/<version>/ folders and aggregate contributors
+            foreach (var kvp in majorReleasesDictionary)
+            {
+                var versionKey = kvp.Key; // e.g., "10.0"
+                var majorRelease = kvp.Value;
+                _logger.Info($"Processing dotnet-docker for .NET {versionKey}...");
+
+                // List all src/*/<version>/ folders
+                var versionFolders = await gitHubService.ListDotnetDockerVersionFoldersAsync(versionKey);
+                var allContributors = new Dictionary<string, Contributor>();
+                int totalCommits = 0;
+
+                foreach (var folder in versionFolders)
+                {
+                    var commits = await gitHubService.GetCommitsForPathAsync(folder);
+                    totalCommits += commits.Count;
+                    foreach (var commit in commits)
+                    {
+                        var author = commit.Author;
+                        if (author == null || string.IsNullOrEmpty(author.Login)) continue;
+                        if (BotExclusionConstants.IsBot(author.Login)) continue;
+
+                        if (!allContributors.TryGetValue(author.Login, out var contributor))
+                        {
+                            contributor = new Contributor
+                            {
+                                Name = author.Login,
+                                Link = author.HtmlUrl,
+                                Avatar = author.AvatarUrl,
+                                Count = 1,
+                                Repos = new List<RepoItem> { new RepoItem { Name = "dotnet-docker", Count = 1 } }
+                            };
+                            allContributors[author.Login] = contributor;
+                        }
+                        else
+                        {
+                            contributor.Count += 1;
+                            var repoItem = contributor.Repos.Find(r => r.Name == "dotnet-docker");
+                            if (repoItem == null)
+                                contributor.Repos.Add(new RepoItem { Name = "dotnet-docker", Count = 1 });
+                            else
+                                repoItem.Count += 1;
+                        }
+                    }
+                }
+
+                // Add contributors to MajorRelease
+                foreach (var contributor in allContributors.Values)
+                {
+                    if (!majorRelease.Contributors.Any(c => c.Link == contributor.Link))
+                        majorRelease.Contributors.Add(contributor);
+                }
+                majorRelease.Contributions += totalCommits;
+
+                // Mark as processed
+                var processedKey = $"dotnet-docker-{versionKey}";
+                if (!majorRelease.ProcessedReleases.Contains(processedKey))
+                    majorRelease.ProcessedReleases.Add(processedKey);
+            }
         }
 
         /// <summary>

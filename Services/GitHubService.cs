@@ -197,5 +197,50 @@ namespace dotnetthanks_loader
 
             return results;
         }
+
+         /// <summary>
+        /// Lists all subdirectories under src/ in dotnet-docker for a given .NET version (e.g., 10.0).
+        /// </summary>
+        public async Task<IReadOnlyList<string>> ListDotnetDockerVersionFoldersAsync(string version)
+        {
+            // List all directories under src/*/<version>/
+            var repoOwner = "dotnet";
+            var repoName = "dotnet-docker";
+            var srcContents = await _ghclient.Repository.Content.GetAllContentsByRef(repoOwner, repoName, "src", "main");
+            var folders = new List<string>();
+            foreach (var item in srcContents)
+            {
+                if (item.Type == ContentType.Dir)
+                {
+                    // Check if this directory contains a subdirectory for the version
+                    var versionPath = $"src/{item.Name}/{version}";
+                    try
+                    {
+                        var versionContents = await _ghclient.Repository.Content.GetAllContentsByRef(repoOwner, repoName, versionPath, "main");
+                        if (versionContents.Any())
+                        {
+                            folders.Add(versionPath);
+                        }
+                    }
+                    catch (Octokit.NotFoundException)
+                    {
+                        // Directory does not exist, skip
+                    }
+                }
+            }
+            return folders;
+        }
+
+        /// <summary>
+        /// Gets commit history for a given path in dotnet-docker main branch.
+        /// </summary>
+        public async Task<IReadOnlyList<GitHubCommit>> GetCommitsForPathAsync(string path)
+        {
+            var repoOwner = "dotnet";
+            var repoName = "dotnet-docker";
+            var request = new CommitRequest { Path = path, Sha = "main" };
+            var commits = await _ghclient.Repository.Commit.GetAll(repoOwner, repoName, request);
+            return commits;
+        }
     }
 }
