@@ -197,5 +197,75 @@ namespace dotnetthanks_loader
 
             return results;
         }
+        /// <summary>
+        /// Lists all subdirectories under src/ in dotnet-docker for a given .NET version (e.g., 10.0).
+        /// </summary>
+        public async Task<IReadOnlyList<string>> ListDotnetDockerVersionFoldersAsync(string version)
+        {
+            // dotnet-docker repo: https://github.com/dotnet/dotnet-docker
+            // We want all folders matching src/*/<version>/
+            var owner = "dotnet";
+            var repo = "dotnet-docker";
+            var results = new List<string>();
+            try
+            {
+                // List all directories under src/
+                var contents = await _ghclient.Repository.Content.GetAllContentsByRef(owner, repo, "src", "main");
+                foreach (var item in contents)
+                {
+                    if (item.Type == ContentType.Dir)
+                    {
+                        // For each subdir, look for subfolders matching the version
+                        var subdir = item.Path; // e.g., src/runtime
+                        var subContents = await _ghclient.Repository.Content.GetAllContentsByRef(owner, repo, subdir, "main");
+                        foreach (var subItem in subContents)
+                        {
+                            if (subItem.Type == ContentType.Dir && subItem.Name == version)
+                            {
+                                results.Add(subItem.Path); // e.g., src/runtime/10.0
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"Failed to list dotnet-docker version folders for {version}");
+            }
+            return results;
+        }
+
+        /// <summary>
+        /// Gets commit history for a given path in dotnet-docker main branch.
+        /// </summary>
+        public async Task<IReadOnlyList<Octokit.GitHubCommit>> GetCommitsForPathAsync(string path)
+        {
+            var owner = "dotnet";
+            var repo = "dotnet-docker";
+            var results = new List<Octokit.GitHubCommit>();
+            try
+            {
+                // Use the GitHub API to get commits for a path
+                var request = new CommitRequest
+                {
+                    Path = path,
+                };
+                // Paginate if necessary
+                int page = 1;
+                const int perPage = 100;
+                IReadOnlyList<Octokit.GitHubCommit> pageResults;
+                do
+                {
+                    pageResults = await _ghclient.Repository.Commit.GetAll(owner, repo, request, new ApiOptions { PageCount = 1, PageSize = perPage, StartPage = page });
+                    results.AddRange(pageResults);
+                    page++;
+                } while (pageResults.Count == perPage);
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, $"Failed to get commits for path {path} in dotnet-docker");
+            }
+            return results;
+        }
     }
 }
