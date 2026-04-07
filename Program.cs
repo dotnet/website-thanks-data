@@ -130,7 +130,16 @@ namespace dotnetthanks_loader
 
             // Process dotnet-docker contributions for all .NET versions
             _logger.Info("\nProcessing dotnet-docker contributions for all .NET versions...");
-            await ProcessDotnetDockerContributionsAsync(gitHubService, majorReleasesDictionary);
+
+            // Process dotnet-docker contributions and collect contributors per version
+            var dotnetDockerContributors = await ProcessDotnetDockerContributionsWithResultAsync(gitHubService, majorReleasesDictionary);
+
+            // Write dotnet-docker contributors to a separate JSON file for historical tracking
+            File.WriteAllText("./dotnetdocker-contributors.json", JsonSerializer.Serialize(dotnetDockerContributors, _jsonOptions));
+            _logger.Info("\nDotnet-docker contributors written to ./dotnetdocker-contributors.json");
+
+            // (Legacy call for compatibility, can be removed if not needed)
+            // await ProcessDotnetDockerContributionsAsync(gitHubService, majorReleasesDictionary);
 
             // Write results
             var sortedList = majorReleasesDictionary.Values.ToList();
@@ -140,12 +149,13 @@ namespace dotnetthanks_loader
         }
 
         /// <summary>
-        /// Process dotnet-docker repo contributions for all .NET versions
+        /// Process dotnet-docker repo contributions for all .NET versions and return a dictionary for historical tracking.
         /// </summary>
-        private static async Task ProcessDotnetDockerContributionsAsync(
+        private static async Task<Dictionary<string, List<Contributor>>> ProcessDotnetDockerContributionsWithResultAsync(
             IGitHubService gitHubService,
             Dictionary<string, MajorRelease> majorReleasesDictionary)
         {
+            var versionContributors = new Dictionary<string, List<Contributor>>();
             // For each .NET version in majorReleasesDictionary, enumerate src/*/<version>/ folders and aggregate contributors
             foreach (var kvp in majorReleasesDictionary)
             {
@@ -155,6 +165,8 @@ namespace dotnetthanks_loader
 
                 // List all src/*/<version>/ folders
                 var versionFolders = await gitHubService.ListDotnetDockerVersionFoldersAsync(versionKey);
+                _logger.Info($"Found {versionFolders.Count} dotnet-docker releases for .NET {versionKey}");
+
                 var allContributors = new Dictionary<string, Contributor>();
                 int totalCommits = 0;
 
@@ -164,7 +176,7 @@ namespace dotnetthanks_loader
                     totalCommits += commits.Count;
                     foreach (var commit in commits)
                     {
-                        var author = commit.Author;
+                        var author = commit?.Author;
                         if (author == null || string.IsNullOrEmpty(author.Login)) continue;
                         if (BotExclusionConstants.IsBot(author.Login)) continue;
 
@@ -192,11 +204,29 @@ namespace dotnetthanks_loader
                     }
                 }
 
-                // Add contributors to MajorRelease
+
+                // Add or update contributors in MajorRelease
                 foreach (var contributor in allContributors.Values)
                 {
-                    if (!majorRelease.Contributors.Any(c => c.Link == contributor.Link))
+                    var existing = majorRelease.Contributors.FirstOrDefault(c => c.Link == contributor.Link);
+                    if (existing == null)
+                    {
                         majorRelease.Contributors.Add(contributor);
+                    }
+                    else
+                    {
+                        // Update commit count
+                        existing.Count += contributor.Count;
+                        // Merge/update repo list
+                        foreach (var repoItem in contributor.Repos)
+                        {
+                            var existingRepo = existing.Repos.FirstOrDefault(r => r.Name == repoItem.Name);
+                            if (existingRepo == null)
+                                existing.Repos.Add(new RepoItem { Name = repoItem.Name, Count = repoItem.Count });
+                            else
+                                existingRepo.Count += repoItem.Count;
+                        }
+                    }
                 }
                 majorRelease.Contributions += totalCommits;
 
@@ -204,7 +234,11 @@ namespace dotnetthanks_loader
                 var processedKey = $"dotnet-docker-{versionKey}";
                 if (!majorRelease.ProcessedReleases.Contains(processedKey))
                     majorRelease.ProcessedReleases.Add(processedKey);
+
+                // Save contributors for this version for historical tracking
+                versionContributors[versionKey] = allContributors.Values.ToList();
             }
+            return versionContributors;
         }
 
         /// <summary>
@@ -286,6 +320,12 @@ namespace dotnetthanks_loader
 
             if (hasChanges)
             {
+                // Also process dotnet-docker contributions for updated releases
+                _logger.Info("\nProcessing dotnet-docker contributions for all .NET versions (diff mode)...");
+                var dotnetDockerContributors = await ProcessDotnetDockerContributionsWithResultAsync(gitHubService, majorReleasesDictionary);
+                File.WriteAllText("./dotnetdocker-contributors.json", JsonSerializer.Serialize(dotnetDockerContributors, _jsonOptions));
+                _logger.Info("\nDotnet-docker contributors written to ./dotnetdocker-contributors.json");
+
                 var sortedList = majorReleasesDictionary.Values.OrderByDescending(o => o.Version).ToList();
                 File.WriteAllText($"./{repo}.json", JsonSerializer.Serialize(sortedList, _jsonOptions));
                 _logger.Info($"\nResults written to ./{repo}.json");

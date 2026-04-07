@@ -11,15 +11,6 @@ namespace dotnetthanks_loader
     public interface IGitHubService
     {
         /// <summary>
-        /// Lists all subdirectories under src/ in dotnet-docker for a given .NET version (e.g., 10.0).
-        /// </summary>
-        Task<IReadOnlyList<string>> ListDotnetDockerVersionFoldersAsync(string version);
-
-        /// <summary>
-        /// Gets commit history for a given path in dotnet-docker main branch.
-        /// </summary>
-        Task<IReadOnlyList<Octokit.GitHubCommit>> GetCommitsForPathAsync(string path);
-        /// <summary>
         /// Gets all releases for a repository.
         /// </summary>
         /// <param name="owner">Repository owner (e.g., "dotnet")</param>
@@ -49,5 +40,15 @@ namespace dotnetthanks_loader
         /// <param name="body">The release body markdown content</param>
         /// <returns>List of child repositories with their tags</returns>
         List<ChildRepo> ParseReleaseBody(string body);
+
+        /// <summary>
+        /// Lists all subdirectories under src/ in dotnet-docker for a given .NET version (e.g., 10.0).
+        /// </summary>
+        Task<IReadOnlyList<string>> ListDotnetDockerVersionFoldersAsync(string version);
+
+        /// <summary>
+        /// Gets commit history for a given path in dotnet-docker main branch.
+        /// </summary>
+        Task<IReadOnlyList<Octokit.GitHubCommit>> GetCommitsForPathAsync(string path);
     }
 }

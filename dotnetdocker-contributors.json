@@ -1,0 +1,272 @@
+{
+    "11.0": [
+        {
+            "Name": "lbussell",
+            "Link": "https://github.com/lbussell",
+            "Avatar": "https://avatars.githubusercontent.com/u/36081148?v=4",
+            "Count": 17,
+            "Repos": [
+                {
+                    "Name": "dotnet-docker",
+                    "Count": 17
+                }
+            ]
+        }
+    ],
+    "10.0": [
+        {
+            "Name": "lbussell",
+            "Link": "https://github.com/lbussell",
+            "Avatar": "https://avatars.githubusercontent.com/u/36081148?v=4",
+            "Count": 122,
+            "Repos": [
+                {
+                    "Name": "dotnet-docker",
+                    "Count": 122
+                }
+            ]
+        },
+        {
+            "Name": "mthalman",
+            "Link": "https://github.com/mthalman",
+            "Avatar": "https://avatars.githubusercontent.com/u/15789599?v=4",
+            "Count": 1,
+            "Repos": [
+                {
+                    "Name": "dotnet-docker",
+                    "Count": 1
+                }
+            ]
+        },
+        {
+            "Name": "wiktork",
+            "Link": "https://github.com/wiktork",
+            "Avatar": "https://avatars.githubusercontent.com/u/15879456?v=4",
+            "Count": 6,
+            "Repos": [
+                {
+                    "Name": "dotnet-docker",
+                    "Count": 6
+                }
+            ]
+        }
+    ],
+    "9.0": [
+        {
+            "Name": "lbussell",
+            "Link": "https://github.com/lbussell",
+            "Avatar": "https://avatars.githubusercontent.com/u/36081148?v=4",
+            "Count": 227,
+            "Repos": [
+                {
+                    "Name": "dotnet-docker",
+                    "Count": 227
+                }
+            ]
+        },
+        {
+            "Name": "jshigetomi",
+            "Link": "https://github.com/jshigetomi",
+            "Avatar": "https://avatars.githubusercontent.com/u/124807742?v=4",
+            "Count": 3,
+            "Repos": [
+                {
+                    "Name": "dotnet-docker",
+                    "Count": 3
+                }
+            ]
+        },
+        {
+            "Name": "SeeminglyScience",
+            "Link": "https://github.com/SeeminglyScience",
+            "Avatar": "https://avatars.githubusercontent.com/u/24977523?v=4",
+            "Count": 1,
+            "Repos": [
+                {
+                    "Name": "dotnet-docker",
+                    "Count": 1
+                }
+            ]
+        },
+        {
+            "Name": "adityapatwardhan",
+            "Link": "https://github.com/adityapatwardhan",
+            "Avatar": "https://avatars.githubusercontent.com/u/12820925?v=4",
+            "Count": 3,
+            "Repos": [
+                {
+                    "Name": "dotnet-docker",
+                    "Count": 3
+                }
+            ]
+        },
+        {
+            "Name": "mthalman",
+            "Link": "https://github.com/mthalman",
+            "Avatar": "https://avatars.githubusercontent.com/u/15789599?v=4",
+            "Count": 8,
+            "Repos": [
+                {
+                    "Name": "dotnet-docker",
+                    "Count": 8
+                }
+            ]
+        },
+        {
+            "Name": "daxian-dbw",
+            "Link": "https://github.com/daxian-dbw",
+            "Avatar": "https://avatars.githubusercontent.com/u/127450?v=4",
+            "Count": 1,
+            "Repos": [
+                {
+                    "Name": "dotnet-docker",
+                    "Count": 1
+                }
+            ]
+        },
+        {
+            "Name": "MichaelSimons",
+            "Link": "https://github.com/MichaelSimons",
+            "Avatar": "https://avatars.githubusercontent.com/u/8290530?v=4",
+            "Count": 6,
+            "Repos": [
+                {
+                    "Name": "dotnet-docker",
+                    "Count": 6
+                }
+            ]
+        },
+        {
+            "Name": "jander-msft",
+            "Link": "https://github.com/jander-msft",
+            "Avatar": "https://avatars.githubusercontent.com/u/17344677?v=4",
+            "Count": 4,
+            "Repos": [
+                {
+                    "Name": "dotnet-docker",
+                    "Count": 4
+                }
+            ]
+        },
+        {
+            "Name": "wiktork",
+            "Link": "https://github.com/wiktork",
+            "Avatar": "https://avatars.githubusercontent.com/u/15879456?v=4",
+            "Count": 4,
+            "Repos": [
+                {
+                    "Name": "dotnet-docker",
+                    "Count": 4
+                }
+            ]
+        }
+    ],
+    "8.0": [
+        {
+            "Name": "lbussell",
+            "Link": "https://github.com/lbussell",
+            "Avatar": "https://avatars.githubusercontent.com/u/36081148?v=4",
+            "Count": 260,
+            "Repos": [
+                {
+                    "Name": "dotnet-docker",
+                    "Count": 260
+                }
+            ]
+        },
+        {
+            "Name": "mthalman",
+            "Link": "https://github.com/mthalman",
+            "Avatar": "https://avatars.githubusercontent.com/u/15789599?v=4",
+            "Count": 7,
+            "Repos": [
+                {
+                    "Name": "dotnet-docker",
+                    "Count": 7
+                }
+            ]
+        },
+        {
+            "Name": "jshigetomi",
+            "Link": "https://github.com/jshigetomi",
+            "Avatar": "https://avatars.githubusercontent.com/u/124807742?v=4",
+            "Count": 2,
+            "Repos": [
+                {
+                    "Name": "dotnet-docker",
+                    "Count": 2
+                }
+            ]
+        },
+        {
+            "Name": "SeeminglyScience",
+            "Link": "https://github.com/SeeminglyScience",
+            "Avatar": "https://avatars.githubusercontent.com/u/24977523?v=4",
+            "Count": 4,
+            "Repos": [
+                {
+                    "Name": "dotnet-docker",
+                    "Count": 4
+                }
+            ]
+        },
+        {
+            "Name": "adityapatwardhan",
+            "Link": "https://github.com/adityapatwardhan",
+            "Avatar": "https://avatars.githubusercontent.com/u/12820925?v=4",
+            "Count": 7,
+            "Repos": [
+                {
+                    "Name": "dotnet-docker",
+                    "Count": 7
+                }
+            ]
+        },
+        {
+            "Name": "daxian-dbw",
+            "Link": "https://github.com/daxian-dbw",
+            "Avatar": "https://avatars.githubusercontent.com/u/127450?v=4",
+            "Count": 3,
+            "Repos": [
+                {
+                    "Name": "dotnet-docker",
+                    "Count": 3
+                }
+            ]
+        },
+        {
+            "Name": "MichaelSimons",
+            "Link": "https://github.com/MichaelSimons",
+            "Avatar": "https://avatars.githubusercontent.com/u/8290530?v=4",
+            "Count": 1,
+            "Repos": [
+                {
+                    "Name": "dotnet-docker",
+                    "Count": 1
+                }
+            ]
+        },
+        {
+            "Name": "ivdiazsa",
+            "Link": "https://github.com/ivdiazsa",
+            "Avatar": "https://avatars.githubusercontent.com/u/52939971?v=4",
+            "Count": 2,
+            "Repos": [
+                {
+                    "Name": "dotnet-docker",
+                    "Count": 2
+                }
+            ]
+        }
+    ],
+    "7.0": [],
+    "6.0": [],
+    "5.0": [],
+    "3.1": [],
+    "3.0": [],
+    "2.2": [],
+    "2.1": [],
+    "2.0": [],
+    "1.1": [],
+    "1.0": []
+}

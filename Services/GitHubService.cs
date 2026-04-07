@@ -5,6 +5,7 @@ using Octokit;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Threading;
 
 namespace dotnetthanks_loader
 {
@@ -17,6 +18,46 @@ namespace dotnetthanks_loader
         private readonly HttpClient _httpClient;
         private readonly ILoggingService _logger;
         private readonly bool _useLocalCoreJson;
+        private readonly SemaphoreSlim _rateLimitGate = new(1, 1);
+
+        public async Task<List<MajorRelease>?> LoadCoreJsonAsync()
+        {
+            if (_useLocalCoreJson)
+            {
+                return LoadLocalCoreJson();
+            }
+
+            var url = "https://dotnet.microsoft.com/blob-assets/json/thanks/core.json";
+
+            try
+            {
+                var response = await _httpClient.GetFromJsonAsync<List<MajorRelease>>(url);
+                return response;
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Failed to load core.json from URL");
+            }
+
+            return null;
+        }
+
+        private List<MajorRelease>? LoadLocalCoreJson()
+        {
+            try
+            {
+                string fileName = "core.json";
+                string jsonString = File.ReadAllText(fileName);
+                var corejson = JsonSerializer.Deserialize<List<MajorRelease>>(jsonString);
+                return corejson;
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Failed to load core.json");
+            }
+
+            return null;
+        }
 
         public GitHubService(IConfiguration config, HttpClient httpClient, ILoggingService? logger = null, bool useLocalCoreJson = false)
         {
@@ -33,6 +74,37 @@ namespace dotnetthanks_loader
             {
                 var basic = new Credentials(clientId, clientSecret);
                 _ghclient.Credentials = basic;
+            }
+        }
+
+
+        private async Task<T> ExecuteWithRateLimitAsync<T>(Func<Task<T>> apiCall)
+        {
+            await _rateLimitGate.WaitAsync();
+            try
+            {
+                var result = await apiCall();
+
+                // Check remaining after each call (reads last response headers)
+                var apiInfo = _ghclient.GetLastApiInfo();
+                var remaining = apiInfo?.RateLimit?.Remaining;
+                var reset = apiInfo?.RateLimit?.Reset;
+
+                if (remaining.HasValue && remaining.Value < 10 && reset.HasValue)
+                {
+                    var waitTime = reset.Value - DateTimeOffset.UtcNow;
+                    if (waitTime > TimeSpan.Zero)
+                    {
+                        _logger.LogRateLimit(waitTime.TotalMinutes, reset.Value.LocalDateTime);
+                        await Task.Delay(waitTime + TimeSpan.FromSeconds(2)); // small buffer
+                    }
+                }
+
+                return result;
+            }
+            finally
+            {
+                _rateLimitGate.Release();
             }
         }
 
@@ -123,51 +195,14 @@ namespace dotnetthanks_loader
                         !BotExclusionConstants.IsBot(c.author.name) &&
                         !c.author.name.ToLower().Contains("[bot]"))
                     .ToList();
+
             }
             catch (Exception ex)
             {
                 _logger.Error(ex, $"Compare {fromRef}...{toRef}");
                 return null;
             }
-        }
 
-        public async Task<List<MajorRelease>?> LoadCoreJsonAsync()
-        {
-            if (_useLocalCoreJson)
-            {
-                return LoadLocalCoreJson();
-            }
-
-            var url = "https://dotnet.microsoft.com/blob-assets/json/thanks/core.json";
-
-            try
-            {
-                var response = await _httpClient.GetFromJsonAsync<List<MajorRelease>>(url);
-                return response;
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, "Failed to load core.json from URL");
-            }
-
-            return null;
-        }
-
-        private List<MajorRelease>? LoadLocalCoreJson()
-        {
-            try
-            {
-                string fileName = "core.json";
-                string jsonString = File.ReadAllText(fileName);
-                var corejson = JsonSerializer.Deserialize<List<MajorRelease>>(jsonString);
-                return corejson;
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, "Failed to load core.json");
-            }
-
-            return null;
         }
 
         public List<ChildRepo> ParseReleaseBody(string body)
@@ -206,18 +241,17 @@ namespace dotnetthanks_loader
             // We want all folders matching src/*/<version>/
             var owner = "dotnet";
             var repo = "dotnet-docker";
-            var results = new List<string>();
+            var results = new System.Collections.Concurrent.ConcurrentBag<string>();
             try
             {
                 // List all directories under src/
-                var contents = await _ghclient.Repository.Content.GetAllContentsByRef(owner, repo, "src", "main");
-                foreach (var item in contents)
-                {
-                    if (item.Type == ContentType.Dir)
+                var contents = await ExecuteWithRateLimitAsync(() => _ghclient.Repository.Content.GetAllContentsByRef(owner, repo, "src", "main"));
+                var subTasks = contents
+                    .Where(item => item.Type == ContentType.Dir)
+                    .Select(async item =>
                     {
-                        // For each subdir, look for subfolders matching the version
                         var subdir = item.Path; // e.g., src/runtime
-                        var subContents = await _ghclient.Repository.Content.GetAllContentsByRef(owner, repo, subdir, "main");
+                        var subContents = await ExecuteWithRateLimitAsync(() => _ghclient.Repository.Content.GetAllContentsByRef(owner, repo, subdir, "main"));
                         foreach (var subItem in subContents)
                         {
                             if (subItem.Type == ContentType.Dir && subItem.Name == version)
@@ -225,14 +259,14 @@ namespace dotnetthanks_loader
                                 results.Add(subItem.Path); // e.g., src/runtime/10.0
                             }
                         }
-                    }
-                }
+                    });
+                await Task.WhenAll(subTasks);
             }
             catch (Exception ex)
             {
                 _logger.Error(ex, $"Failed to list dotnet-docker version folders for {version}");
             }
-            return results;
+            return results.ToList();
         }
 
         /// <summary>
@@ -256,7 +290,7 @@ namespace dotnetthanks_loader
                 IReadOnlyList<Octokit.GitHubCommit> pageResults;
                 do
                 {
-                    pageResults = await _ghclient.Repository.Commit.GetAll(owner, repo, request, new ApiOptions { PageCount = 1, PageSize = perPage, StartPage = page });
+                    pageResults = await ExecuteWithRateLimitAsync(() => _ghclient.Repository.Commit.GetAll(owner, repo, request, new ApiOptions { PageCount = 1, PageSize = perPage, StartPage = page }));
                     results.AddRange(pageResults);
                     page++;
                 } while (pageResults.Count == perPage);
