@@ -318,11 +318,92 @@ namespace dotnetthanks_loader
                     "maui", VersionMapper.MapMauiVersionToDotNet);
             }
 
-            if (hasChanges)
+            // Process new dotnet-docker contributors (diff mode)
+            bool dockerHasChanges = false;
+            var dotnetDockerContributors = new Dictionary<string, List<Contributor>>();
+            foreach (var kvp in majorReleasesDictionary)
             {
-                // Also process dotnet-docker contributions for updated releases
-                _logger.Info("\nProcessing dotnet-docker contributions for all .NET versions (diff mode)...");
-                var dotnetDockerContributors = await ProcessDotnetDockerContributionsWithResultAsync(gitHubService, majorReleasesDictionary);
+                var versionKey = kvp.Key; // e.g., "10.0"
+                var majorRelease = kvp.Value;
+                var processedKey = $"dotnet-docker-{versionKey}";
+                if (majorRelease.ProcessedReleases.Contains(processedKey))
+                    continue; // Already processed
+
+                _logger.Info($"Processing dotnet-docker for .NET {versionKey} (diff mode)...");
+                var versionFolders = await gitHubService.ListDotnetDockerVersionFoldersAsync(versionKey);
+                _logger.Info($"Found {versionFolders.Count} dotnet-docker releases for .NET {versionKey}");
+
+                var allContributors = new Dictionary<string, Contributor>();
+                int totalCommits = 0;
+                foreach (var folder in versionFolders)
+                {
+                    var commits = await gitHubService.GetCommitsForPathAsync(folder);
+                    totalCommits += commits.Count;
+                    foreach (var commit in commits)
+                    {
+                        var author = commit?.Author;
+                        if (author == null || string.IsNullOrEmpty(author.Login)) continue;
+                        if (BotExclusionConstants.IsBot(author.Login)) continue;
+
+                        if (!allContributors.TryGetValue(author.Login, out var contributor))
+                        {
+                            contributor = new Contributor
+                            {
+                                Name = author.Login,
+                                Link = author.HtmlUrl,
+                                Avatar = author.AvatarUrl,
+                                Count = 1,
+                                Repos = new List<RepoItem> { new RepoItem { Name = "dotnet-docker", Count = 1 } }
+                            };
+                            allContributors[author.Login] = contributor;
+                        }
+                        else
+                        {
+                            contributor.Count += 1;
+                            var repoItem = contributor.Repos.Find(r => r.Name == "dotnet-docker");
+                            if (repoItem == null)
+                                contributor.Repos.Add(new RepoItem { Name = "dotnet-docker", Count = 1 });
+                            else
+                                repoItem.Count += 1;
+                        }
+                    }
+                }
+
+                // Add or update contributors in MajorRelease
+                foreach (var contributor in allContributors.Values)
+                {
+                    var existing = majorRelease.Contributors.FirstOrDefault(c => c.Link == contributor.Link);
+                    if (existing == null)
+                    {
+                        majorRelease.Contributors.Add(contributor);
+                    }
+                    else
+                    {
+                        existing.Count += contributor.Count;
+                        foreach (var repoItem in contributor.Repos)
+                        {
+                            var existingRepo = existing.Repos.FirstOrDefault(r => r.Name == repoItem.Name);
+                            if (existingRepo == null)
+                                existing.Repos.Add(new RepoItem { Name = repoItem.Name, Count = repoItem.Count });
+                            else
+                                existingRepo.Count += repoItem.Count;
+                        }
+                    }
+                }
+                majorRelease.Contributions += totalCommits;
+
+                // Mark as processed
+                if (!majorRelease.ProcessedReleases.Contains(processedKey))
+                    majorRelease.ProcessedReleases.Add(processedKey);
+
+                // Save contributors for this version for historical tracking
+                dotnetDockerContributors[versionKey] = allContributors.Values.ToList();
+                if (allContributors.Count > 0)
+                    dockerHasChanges = true;
+            }
+
+            if (hasChanges || dockerHasChanges)
+            {
                 File.WriteAllText("./dotnetdocker-contributors.json", JsonSerializer.Serialize(dotnetDockerContributors, _jsonOptions));
                 _logger.Info("\nDotnet-docker contributors written to ./dotnetdocker-contributors.json");
 
