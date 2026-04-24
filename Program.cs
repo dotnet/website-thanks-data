@@ -2,6 +2,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using System.Text.Encodings.Web;
 using System.Text.Json;
+using Constants;
 
 namespace dotnetthanks_loader
 {
@@ -129,14 +130,14 @@ namespace dotnetthanks_loader
                 "maui", VersionMapper.MapMauiVersionToDotNet);
 
             // Process dotnet-docker contributions for all .NET versions
-            _logger.Info("\nProcessing dotnet-docker contributions for all .NET versions...");
+            _logger.Info($"\nProcessing {RepoConstants.DotnetDockerRepo} contributions for all .NET versions...");
 
             // Process dotnet-docker contributions and collect contributors per version
             var dotnetDockerContributors = await ProcessDotnetDockerContributionsWithResultAsync(gitHubService, majorReleasesDictionary);
 
             // Write dotnet-docker contributors to a separate JSON file for historical tracking
             File.WriteAllText("./dotnetdocker-contributors.json", JsonSerializer.Serialize(dotnetDockerContributors, _jsonOptions));
-            _logger.Info("\nDotnet-docker contributors written to ./dotnetdocker-contributors.json");
+            _logger.Info($"\n{RepoConstants.DotnetDockerRepo} contributors written to ./dotnetdocker-contributors.json");
 
             // (Legacy call for compatibility, can be removed if not needed)
             // await ProcessDotnetDockerContributionsAsync(gitHubService, majorReleasesDictionary);
@@ -161,11 +162,11 @@ namespace dotnetthanks_loader
             {
                 var versionKey = kvp.Key; // e.g., "10.0"
                 var majorRelease = kvp.Value;
-                _logger.Info($"Processing dotnet-docker for .NET {versionKey}...");
+                _logger.Info($"Processing {RepoConstants.DotnetDockerRepo} for .NET {versionKey}...");
 
                 // List all src/*/<version>/ folders
                 var versionFolders = await gitHubService.ListDotnetDockerVersionFoldersAsync(versionKey);
-                _logger.Info($"Found {versionFolders.Count} dotnet-docker releases for .NET {versionKey}");
+                _logger.Info($"Found {versionFolders.Count} {RepoConstants.DotnetDockerRepo} releases for .NET {versionKey}");
 
                 var allContributors = new Dictionary<string, Contributor>();
                 int totalCommits = 0;
@@ -188,16 +189,16 @@ namespace dotnetthanks_loader
                                 Link = author.HtmlUrl,
                                 Avatar = author.AvatarUrl,
                                 Count = 1,
-                                Repos = new List<RepoItem> { new RepoItem { Name = "dotnet-docker", Count = 1 } }
+                                Repos = new List<RepoItem> { new RepoItem { Name = RepoConstants.DotnetDockerRepo, Count = 1 } }
                             };
                             allContributors[author.Login] = contributor;
                         }
                         else
                         {
                             contributor.Count += 1;
-                            var repoItem = contributor.Repos.Find(r => r.Name == "dotnet-docker");
+                            var repoItem = contributor.Repos.Find(r => r.Name == RepoConstants.DotnetDockerRepo);
                             if (repoItem == null)
-                                contributor.Repos.Add(new RepoItem { Name = "dotnet-docker", Count = 1 });
+                                contributor.Repos.Add(new RepoItem { Name = RepoConstants.DotnetDockerRepo, Count = 1 });
                             else
                                 repoItem.Count += 1;
                         }
@@ -231,7 +232,7 @@ namespace dotnetthanks_loader
                 majorRelease.Contributions += totalCommits;
 
                 // Mark as processed
-                var processedKey = $"dotnet-docker-{versionKey}";
+                var processedKey = $"{RepoConstants.DotnetDockerRepo}-{versionKey}";
                 if (!majorRelease.ProcessedReleases.Contains(processedKey))
                     majorRelease.ProcessedReleases.Add(processedKey);
 
@@ -325,13 +326,13 @@ namespace dotnetthanks_loader
             {
                 var versionKey = kvp.Key; // e.g., "10.0"
                 var majorRelease = kvp.Value;
-                var processedKey = $"dotnet-docker-{versionKey}";
+                var processedKey = $"{RepoConstants.DotnetDockerRepo}-{versionKey}";
                 if (majorRelease.ProcessedReleases.Contains(processedKey))
                     continue; // Already processed
 
-                _logger.Info($"Processing dotnet-docker for .NET {versionKey} (diff mode)...");
+                _logger.Info($"Processing {RepoConstants.DotnetDockerRepo} for .NET {versionKey} (diff mode)...");
                 var versionFolders = await gitHubService.ListDotnetDockerVersionFoldersAsync(versionKey);
-                _logger.Info($"Found {versionFolders.Count} dotnet-docker releases for .NET {versionKey}");
+                _logger.Info($"Found {versionFolders.Count} {RepoConstants.DotnetDockerRepo} releases for .NET {versionKey}");
 
                 var allContributors = new Dictionary<string, Contributor>();
                 int totalCommits = 0;
@@ -353,16 +354,16 @@ namespace dotnetthanks_loader
                                 Link = author.HtmlUrl,
                                 Avatar = author.AvatarUrl,
                                 Count = 1,
-                                Repos = new List<RepoItem> { new RepoItem { Name = "dotnet-docker", Count = 1 } }
+                                Repos = new List<RepoItem> { new RepoItem { Name = RepoConstants.DotnetDockerRepo, Count = 1 } }
                             };
                             allContributors[author.Login] = contributor;
                         }
                         else
                         {
                             contributor.Count += 1;
-                            var repoItem = contributor.Repos.Find(r => r.Name == "dotnet-docker");
+                            var repoItem = contributor.Repos.Find(r => r.Name == RepoConstants.DotnetDockerRepo);
                             if (repoItem == null)
-                                contributor.Repos.Add(new RepoItem { Name = "dotnet-docker", Count = 1 });
+                                contributor.Repos.Add(new RepoItem { Name = RepoConstants.DotnetDockerRepo, Count = 1 });
                             else
                                 repoItem.Count += 1;
                         }
@@ -404,8 +405,11 @@ namespace dotnetthanks_loader
 
             if (hasChanges || dockerHasChanges)
             {
-                File.WriteAllText("./dotnetdocker-contributors.json", JsonSerializer.Serialize(dotnetDockerContributors, _jsonOptions));
-                _logger.Info("\nDotnet-docker contributors written to ./dotnetdocker-contributors.json");
+                if (dockerHasChanges)
+                {
+                    File.WriteAllText("./dotnetdocker-contributors.json", JsonSerializer.Serialize(dotnetDockerContributors, _jsonOptions));
+                    _logger.Info($"\n{RepoConstants.DotnetDockerRepo} contributors written to ./dotnetdocker-contributors.json");
+                }
 
                 var sortedList = majorReleasesDictionary.Values.OrderByDescending(o => o.Version).ToList();
                 File.WriteAllText($"./{repo}.json", JsonSerializer.Serialize(sortedList, _jsonOptions));

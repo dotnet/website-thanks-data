@@ -111,7 +111,7 @@ namespace dotnetthanks_loader
 
         public async Task<IEnumerable<Release>> GetReleasesAsync(string owner, string repo)
         {
-            var results = await _ghclient.Repository.Release.GetAll(owner, repo);
+            var results = await ExecuteWithRateLimitAsync(() => _ghclient.Repository.Release.GetAll(owner, repo));
 
             return results.Select(release => new Release
             {
@@ -129,7 +129,7 @@ namespace dotnetthanks_loader
             try
             {
                 // First call to check total commits
-                var initialComparison = await _ghclient.Repository.Commit.Compare(owner, repo, fromRef, toRef);
+                var initialComparison = await ExecuteWithRateLimitAsync(() => _ghclient.Repository.Commit.Compare(owner, repo, fromRef, toRef));
 
                 var allCommits = new List<GitHubCommit>();
 
@@ -150,7 +150,7 @@ namespace dotnetthanks_loader
                             StartPage = page
                         };
 
-                        var pagedComparison = await _ghclient.Repository.Commit.Compare(owner, repo, fromRef, toRef, options);
+                        var pagedComparison = await ExecuteWithRateLimitAsync(() => _ghclient.Repository.Commit.Compare(owner, repo, fromRef, toRef, options));
                         allCommits.AddRange(pagedComparison.Commits);
 
                         _logger.Debug($"Loaded page {page}/{totalPages} ({pagedComparison.Commits.Count()} commits)");
