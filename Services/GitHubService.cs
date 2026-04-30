@@ -6,6 +6,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
+using dotnetthanks_loader;
 
 namespace dotnetthanks_loader
 {
@@ -18,7 +19,7 @@ namespace dotnetthanks_loader
         private readonly HttpClient _httpClient;
         private readonly ILoggingService _logger;
         private readonly bool _useLocalCoreJson;
-        private readonly SemaphoreSlim _rateLimitGate = new(1, 1);
+        private readonly SemaphoreSlim _rateLimitGate = new(5, 5);
 
         public async Task<List<MajorRelease>?> LoadCoreJsonAsync()
         {
@@ -240,7 +241,7 @@ namespace dotnetthanks_loader
             // dotnet-docker repo: https://github.com/dotnet/dotnet-docker
             // We want all folders matching src/*/<version>/
             var owner = "dotnet";
-            var repo = "dotnet-docker";
+            var repo = RepoConstants.DotnetDockerRepo;
             var results = new System.Collections.Concurrent.ConcurrentBag<string>();
             try
             {
@@ -275,7 +276,7 @@ namespace dotnetthanks_loader
         public async Task<IReadOnlyList<Octokit.GitHubCommit>> GetCommitsForPathAsync(string path)
         {
             var owner = "dotnet";
-            var repo = "dotnet-docker";
+            var repo = RepoConstants.DotnetDockerRepo;
             var results = new List<Octokit.GitHubCommit>();
             try
             {

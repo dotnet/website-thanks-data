@@ -1,4 +1,4 @@
-namespace Constants
+namespace dotnetthanks_loader
 {
     public static class RepoConstants
     {
