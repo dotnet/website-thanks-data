@@ -234,15 +234,23 @@ namespace dotnetthanks_loader
             return results;
         }
         /// <summary>
-        /// Lists all subdirectories under src/ in dotnet-docker for a given .NET version (e.g., 10.0).
+        /// Lists all subdirectories under src/*/<version>/ in dotnet-docker for a given .NET version (e.g., 10.0).
+        /// Optimized: fetches all version folders in one set of API calls and filters in memory.
         /// </summary>
         public async Task<IReadOnlyList<string>> ListDotnetDockerVersionFoldersAsync(string version)
         {
-            // dotnet-docker repo: https://github.com/dotnet/dotnet-docker
-            // We want all folders matching src/*/<version>/
+            var allVersionFolders = await ListAllDotnetDockerVersionFoldersAsync();
+            return allVersionFolders.Where(path => path.EndsWith($"/{version}", StringComparison.Ordinal)).ToList();
+        }
+
+        /// <summary>
+        /// Lists all subdirectories under src/*/* in dotnet-docker (all version folders for all products).
+        /// </summary>
+        public async Task<IReadOnlyList<string>> ListAllDotnetDockerVersionFoldersAsync()
+        {
             var owner = "dotnet";
             var repo = RepoConstants.DotnetDockerRepo;
-            var results = new System.Collections.Concurrent.ConcurrentBag<string>();
+            var results = new List<string>();
             try
             {
                 // List all directories under src/
@@ -255,7 +263,7 @@ namespace dotnetthanks_loader
                         var subContents = await ExecuteWithRateLimitAsync(() => _ghclient.Repository.Content.GetAllContentsByRef(owner, repo, subdir, "main"));
                         foreach (var subItem in subContents)
                         {
-                            if (subItem.Type == ContentType.Dir && subItem.Name == version)
+                            if (subItem.Type == ContentType.Dir)
                             {
                                 results.Add(subItem.Path); // e.g., src/runtime/10.0
                             }
@@ -265,9 +273,9 @@ namespace dotnetthanks_loader
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, $"Failed to list dotnet-docker version folders for {version}");
+                _logger.Error(ex, $"Failed to list all dotnet-docker version folders");
             }
-            return results.ToList();
+            return results;
         }
 
         /// <summary>
@@ -280,21 +288,20 @@ namespace dotnetthanks_loader
             var results = new List<Octokit.GitHubCommit>();
             try
             {
-                // Use the GitHub API to get commits for a path
-                var request = new CommitRequest
-                {
-                    Path = path,
-                };
-                // Paginate if necessary
+                var request = new CommitRequest { Path = path, Sha = "main" };
+                var options = new ApiOptions { PageSize = 100 };
                 int page = 1;
-                const int perPage = 100;
-                IReadOnlyList<Octokit.GitHubCommit> pageResults;
-                do
+                while (true)
                 {
-                    pageResults = await ExecuteWithRateLimitAsync(() => _ghclient.Repository.Commit.GetAll(owner, repo, request, new ApiOptions { PageCount = 1, PageSize = perPage, StartPage = page }));
+                    options.StartPage = page;
+                    options.PageCount = 1;
+                    var pageResults = await ExecuteWithRateLimitAsync(
+                        () => _ghclient.Repository.Commit.GetAll(owner, repo, request, options));
+                    if (pageResults.Count == 0) break;
                     results.AddRange(pageResults);
+                    if (pageResults.Count < 100) break;
                     page++;
-                } while (pageResults.Count == perPage);
+                }
             }
             catch (Exception ex)
             {

@@ -136,7 +136,30 @@ namespace dotnetthanks_loader
             var dotnetDockerContributors = await ProcessDotnetDockerContributionsWithResultAsync(gitHubService, majorReleasesDictionary);
 
             // Write dotnet-docker contributors to a separate JSON file for historical tracking
-            File.WriteAllText("./dotnetdocker-contributors.json", JsonSerializer.Serialize(dotnetDockerContributors, _jsonOptions));
+            // Merge with existing dotnetdocker-contributors.json if it exists
+            var dockerContribPath = "./dotnetdocker-contributors.json";
+            Dictionary<string, List<Contributor>> mergedDockerContributors = new(dotnetDockerContributors);
+            if (File.Exists(dockerContribPath))
+            {
+                try
+                {
+                    var existingJson = File.ReadAllText(dockerContribPath);
+                    var existing = JsonSerializer.Deserialize<Dictionary<string, List<Contributor>>>(existingJson, _jsonOptions);
+                    if (existing != null)
+                    {
+                        foreach (var kvp in existing)
+                        {
+                            if (!mergedDockerContributors.ContainsKey(kvp.Key))
+                                mergedDockerContributors[kvp.Key] = kvp.Value;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error($"Failed to merge with existing dotnetdocker-contributors.json: {ex.Message}");
+                }
+            }
+            File.WriteAllText(dockerContribPath, JsonSerializer.Serialize(mergedDockerContributors, _jsonOptions));
             _logger.Info($"\n{RepoConstants.DotnetDockerRepo} contributors written to ./dotnetdocker-contributors.json");
             
             // Write results
@@ -154,7 +177,36 @@ namespace dotnetthanks_loader
             Dictionary<string, MajorRelease> majorReleasesDictionary)
         {
             var versionContributors = new Dictionary<string, List<Contributor>>();
-            // For each .NET version in majorReleasesDictionary, enumerate src/*/<version>/ folders and aggregate contributors
+            var latestShas = new Dictionary<string, string>();
+            // Try to load latest SHAs from dotnetdocker-contributors.json if present
+            var dockerContribPath = "./dotnetdocker-contributors.json";
+            if (File.Exists(dockerContribPath))
+            {
+                try
+                {
+                    var existingJson = File.ReadAllText(dockerContribPath);
+                    using var doc = JsonDocument.Parse(existingJson);
+                    if (doc.RootElement.ValueKind == JsonValueKind.Object)
+                    {
+                        foreach (var prop in doc.RootElement.EnumerateObject())
+                        {
+                            var version = prop.Name;
+                            var contributors = prop.Value;
+                            if (contributors.ValueKind == JsonValueKind.Array && contributors.GetArrayLength() > 0)
+                            {
+                                // Find the latest commit SHA for this version (if present)
+                                var first = contributors[0];
+                                if (first.TryGetProperty("LatestSha", out var shaProp))
+                                {
+                                    latestShas[version] = shaProp.GetString();
+                                }
+                            }
+                        }
+                    }
+                }
+                catch { }
+            }
+
             foreach (var kvp in majorReleasesDictionary)
             {
                 var versionKey = kvp.Key; // e.g., "10.0"
@@ -167,13 +219,23 @@ namespace dotnetthanks_loader
 
                 var allContributors = new Dictionary<string, Contributor>();
                 int totalCommits = 0;
+                string latestSha = latestShas.TryGetValue(versionKey, out var sha) ? sha : null;
+                var seenShas = new HashSet<string>(StringComparer.Ordinal);
 
-                foreach (var folder in versionFolders)
+                // Fetch commits for all folders in parallel
+                var commitFetchTasks = versionFolders.Select(gitHubService.GetCommitsForPathAsync).ToList();
+                var commitsByFolder = await Task.WhenAll(commitFetchTasks);
+
+                foreach (var commits in commitsByFolder)
                 {
-                    var commits = await gitHubService.GetCommitsForPathAsync(folder);
-                    totalCommits += commits.Count;
                     foreach (var commit in commits)
                     {
+                        if (commit?.Sha is null || !seenShas.Add(commit.Sha)) continue;
+                        if (latestSha != null && commit.Sha == latestSha)
+                        {
+                            // Stop processing older commits
+                            break;
+                        }
                         var author = commit?.Author;
                         if (author == null || string.IsNullOrEmpty(author.Login)) continue;
                         if (BotExclusionConstants.IsBot(author.Login)) continue;
@@ -199,9 +261,9 @@ namespace dotnetthanks_loader
                             else
                                 repoItem.Count += 1;
                         }
+                        totalCommits++;
                     }
                 }
-
 
                 // Add or update contributors in MajorRelease
                 foreach (var contributor in allContributors.Values)
@@ -234,7 +296,23 @@ namespace dotnetthanks_loader
                     majorRelease.ProcessedReleases.Add(processedKey);
 
                 // Save contributors for this version for historical tracking
-                versionContributors[versionKey] = allContributors.Values.ToList();
+                // Also store the latest SHA for this version if available
+                var contributorsList = allContributors.Values.ToList();
+                if (contributorsList.Count > 0 && versionFolders.Count > 0)
+                {
+                    // Find the newest commit SHA we processed (first commit in first folder)
+                    var newestCommits = await gitHubService.GetCommitsForPathAsync(versionFolders[0]);
+                    if (newestCommits.Count > 0)
+                    {
+                        var newestSha = newestCommits[0].Sha;
+                        foreach (var c in contributorsList)
+                        {
+                            // Store the latest SHA as a property (for serialization)
+                            c.GetType().GetProperty("LatestSha")?.SetValue(c, newestSha);
+                        }
+                    }
+                }
+                versionContributors[versionKey] = contributorsList;
             }
             return versionContributors;
         }
@@ -324,7 +402,30 @@ namespace dotnetthanks_loader
             {
                 if (dockerHasChanges)
                 {
-                    File.WriteAllText("./dotnetdocker-contributors.json", JsonSerializer.Serialize(dotnetDockerContributors, _jsonOptions));
+                    // Merge with existing dotnetdocker-contributors.json if it exists
+                    var dockerContribPath = "./dotnetdocker-contributors.json";
+                    Dictionary<string, List<Contributor>> mergedDockerContributors = new(dotnetDockerContributors);
+                    if (File.Exists(dockerContribPath))
+                    {
+                        try
+                        {
+                            var existingJson = File.ReadAllText(dockerContribPath);
+                            var existing = JsonSerializer.Deserialize<Dictionary<string, List<Contributor>>>(existingJson, _jsonOptions);
+                            if (existing != null)
+                            {
+                                foreach (var kvp in existing)
+                                {
+                                    if (!mergedDockerContributors.ContainsKey(kvp.Key))
+                                        mergedDockerContributors[kvp.Key] = kvp.Value;
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.Error($"Failed to merge with existing dotnetdocker-contributors.json: {ex.Message}");
+                        }
+                    }
+                    File.WriteAllText(dockerContribPath, JsonSerializer.Serialize(mergedDockerContributors, _jsonOptions));
                     _logger.Info($"\n{RepoConstants.DotnetDockerRepo} contributors written to ./dotnetdocker-contributors.json");
                 }
 
