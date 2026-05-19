@@ -126,6 +126,7 @@ extends:
                 condition: eq(variables['HAS_CORE_JSON'], 'true')
                 env:
                   GITHUB_TOKEN: $(GITHUB_TOKEN)
+                  GIT_TERMINAL_PROMPT: 0
                 inputs:
                   targetType: 'inline'
                   script: |
