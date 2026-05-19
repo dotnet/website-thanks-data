@@ -443,3 +443,6 @@ $RECYCLE.BIN/
 
 ## Repo Specific Files
 core.json
+
+## lscache files
+*.lscache

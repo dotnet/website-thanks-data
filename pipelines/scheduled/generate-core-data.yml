@@ -130,7 +130,7 @@ extends:
                   targetType: 'inline'
                   script: |
                     set -euo pipefail
-                    git clone https://$GITHUB_TOKEN@github.com/dotnet/website.git dotnet-website
+                    git clone https://x-access-token:$GITHUB_TOKEN@github.com/dotnet/website.git dotnet-website
 
               - task: Bash@3
                 displayName: 'Update Website Repository with New Thanks Data'
