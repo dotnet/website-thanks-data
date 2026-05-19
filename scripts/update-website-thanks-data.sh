@@ -53,7 +53,7 @@ echo "Step 2b: Getting main branch HEAD SHA..."
 MAIN_SHA=$(curl -s \
   -H "Authorization: Bearer $GITHUB_TOKEN" \
   -H "Accept: application/vnd.github.v3+json" \
-  "$GITHUB_API/repos/$REPO_OWNER/$REPO_NAME/git/refs/heads/main" \
+  "$GITHUB_API/repos/$REPO_OWNER/$REPO_NAME/git/refs/head/main" \
   | jq -r '.object.sha // empty')
 
 if [ -z "$MAIN_SHA" ]; then
