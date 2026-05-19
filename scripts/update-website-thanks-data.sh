@@ -50,16 +50,22 @@ echo "File size: $(wc -c < "$CORE_JSON_PATH") bytes"
 
 # Step 2b: Get main branch HEAD SHA
 echo "Step 2b: Getting main branch HEAD SHA..."
-MAIN_SHA=$(curl -s \
+MAIN_RESPONSE=$(curl -s -w "\n%{http_code}" \
   -H "Authorization: Bearer $GITHUB_TOKEN" \
   -H "Accept: application/vnd.github.v3+json" \
-  "$GITHUB_API/repos/$REPO_OWNER/$REPO_NAME/git/refs/head/main" \
-  | jq -r '.object.sha // empty')
+  "$GITHUB_API/repos/$REPO_OWNER/$REPO_NAME/git/ref/heads/main")
+
+HTTP_CODE=$(echo "$MAIN_RESPONSE" | tail -n1)
+MAIN_BODY=$(echo "$MAIN_RESPONSE" | head -n-1)
+
+MAIN_SHA=$(echo "$MAIN_BODY" | jq -r '.object.sha // empty')
 
 if [ -z "$MAIN_SHA" ]; then
-    echo "ERROR: Could not get main branch SHA"
+    echo "ERROR: Could not get main branch SHA (HTTP $HTTP_CODE)"
+    echo "$MAIN_BODY"
     exit 1
 fi
+echo "Main SHA: $MAIN_SHA"
 
 # Step 2c: Create the new branch
 echo "Step 2c: Creating branch $BRANCH_NAME from main..."
