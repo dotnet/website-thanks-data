@@ -22,7 +22,7 @@ resources:
       type: git
       ref: main
     - repository: website
-      type: git
+      type: github
       name: dotnet/website
       ref: main
     - repository: 1ESPipelineTemplates
