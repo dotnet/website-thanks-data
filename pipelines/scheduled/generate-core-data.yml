@@ -21,10 +21,7 @@ resources:
     - repository: self
       type: git
       ref: main
-    - repository: website
-      type: git
-      name: website
-      ref: main
+
     - repository: 1ESPipelineTemplates
       type: git
       name: 1ESPipelineTemplates/1ESPipelineTemplates
@@ -124,9 +121,17 @@ extends:
                       echo "##vso[task.setvariable variable=HAS_CORE_JSON]false"
                     fi
 
-              - checkout: dotnetwebsite
+              - task: Bash@3
+                displayName: 'Clone dotnet/website repository'
                 condition: eq(variables['HAS_CORE_JSON'], 'true')
-                displayName: 'Checkout dotnet/website Repository'
+                env:
+                  GITHUB_TOKEN: $(GITHUB_TOKEN)
+                inputs:
+                  targetType: 'inline'
+                  script: |
+                    set -euo pipefail
+                    git clone https://$GITHUB_TOKEN@github.com/dotnet/website.git dotnet-website
+
               - task: Bash@3
                 displayName: 'Update Website Repository with New Thanks Data'
                 condition: eq(variables['HAS_CORE_JSON'], 'true')
@@ -139,7 +144,7 @@ extends:
                   script: |
                     set -euo pipefail
 
-                    cd $(Build.SourcesDirectory)/dotnetwebsite
+                    cd dotnet-website
 
                     # Configure git
                     git config --global user.email "bot@azuredevops.com"
