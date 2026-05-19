@@ -5,9 +5,9 @@
 
 set -euo pipefail
 
-GITHUB_TOKEN="${GITHUB_TOKEN:?GITHUB_TOKEN is required}"
-CORE_JSON_PATH="${1:?CORE_JSON_PATH is required}"
-BUILD_ID="${2:?BUILD_ID is required}"
+GITHUB_TOKEN="${1:?GITHUB_TOKEN is required}"
+CORE_JSON_PATH="${2:?CORE_JSON_PATH is required}"
+BUILD_ID="${3:?BUILD_ID is required}"
 
 GITHUB_API="https://api.github.com"
 REPO_OWNER="dotnet"
@@ -23,6 +23,9 @@ if [ ! -f "$CORE_JSON_PATH" ]; then
     exit 1
 fi
 
+echo "Token length: ${#GITHUB_TOKEN}"
+echo "Token prefix: ${GITHUB_TOKEN:0:4}"  # should print 'ghp_' or 'github_pat_'
+
 echo "Starting GitHub REST API update process..."
 echo "Target: $REPO_OWNER/$REPO_NAME"
 echo "Branch: $BRANCH_NAME"
@@ -30,17 +33,24 @@ echo "File: $TARGET_PATH"
 
 # Step 1: Get current file SHA from main branch (needed for update)
 echo "Step 1: Fetching current file SHA from main branch..."
-CURRENT_SHA=$(curl -s \
+STEP1_RESPONSE=$(curl -s -w "\n%{http_code}" \
   -H "Authorization: Bearer $GITHUB_TOKEN" \
   -H "Accept: application/vnd.github.v3+json" \
-  "$GITHUB_API/repos/$REPO_OWNER/$REPO_NAME/contents/$TARGET_PATH?ref=main" \
-  | jq -r '.sha // empty')
+  "$GITHUB_API/repos/$REPO_OWNER/$REPO_NAME/contents/$TARGET_PATH?ref=main")
 
-if [ -z "$CURRENT_SHA" ]; then
+HTTP_CODE=$(echo "$STEP1_RESPONSE" | tail -n1)
+STEP1_BODY=$(echo "$STEP1_RESPONSE" | head -n-1)
+
+if [ "$HTTP_CODE" == "200" ]; then
+    CURRENT_SHA=$(echo "$STEP1_BODY" | jq -r '.sha')
+    echo "Current file SHA: $CURRENT_SHA"
+elif [ "$HTTP_CODE" == "404" ]; then
     echo "INFO: File does not exist in main branch, will create new file"
     CURRENT_SHA=""
 else
-    echo "Current file SHA: $CURRENT_SHA"
+    echo "ERROR: Unexpected response from GitHub API (HTTP $HTTP_CODE)"
+    echo "$STEP1_BODY"
+    exit 1
 fi
 
 # Step 2: Encode new core.json content in base64

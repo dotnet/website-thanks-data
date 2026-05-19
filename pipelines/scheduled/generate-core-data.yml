@@ -133,4 +133,4 @@ extends:
                 inputs:
                   targetType: 'filePath'
                   filePath: $(Build.SourcesDirectory)/scripts/update-website-thanks-data.sh
-                  arguments: '$(CORE_JSON_PATH) $(Build.BuildId)'
+                  arguments: '$(GITHUB_TOKEN) $(CORE_JSON_PATH) $(Build.BuildId)'
