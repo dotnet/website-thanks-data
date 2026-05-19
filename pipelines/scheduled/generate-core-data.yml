@@ -76,7 +76,6 @@ extends:
                       exit 0
                     }
 
-                    echo "$GITHUB_TOKEN"
                     dotnet user-secrets init
                     [ $? -ne 0 ] && handle_failure "Failed to initialize user secrets"
 
