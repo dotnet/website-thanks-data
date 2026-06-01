@@ -6,8 +6,8 @@ name: $(date:yyyyMMdd)$(rev:.r)
 
 # This pipeline runs on schedule to generate core.json data
 schedules:
-  - cron: "0 1 9-15 * Tue"
-    displayName: "Run second Tuesday each month at 17:00 PST (01:00 UTC Tue)"
+  - cron: "0 1 9-15 * Wed"
+    displayName: "Run second Tuesday each month at 17:00 PST (01:00 UTC Wed)"
     branches:
       include:
         - main
