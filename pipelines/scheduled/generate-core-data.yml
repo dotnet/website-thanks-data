@@ -16,7 +16,7 @@ schedules:
 resources:
   pipelines:
     - pipeline: dotnetwebsite
-      source: 'dotnet-website-main'
+      source: "dotnet-website-main"
   repositories:
     - repository: self
       type: git
@@ -38,17 +38,17 @@ extends:
       - ES365AIMigrationTooling
     stages:
       - stage: thanks_data
-        displayName: 'Generate Thanks Data Stage'
+        displayName: "Generate Thanks Data Stage"
         jobs:
           - job: ProcessThanksData
-            displayName: 'Generate .NET Thanks Data'
+            displayName: "Generate .NET Thanks Data"
             timeoutInMinutes: 1440
             cancelTimeoutInMinutes: 5
             variables:
-              PREPARATION_SUCCEEDED: 'false'
-              HAS_CORE_JSON: 'false'
-              CORE_JSON_PATH: ''
-              BRANCH_NAME: ''
+              PREPARATION_SUCCEEDED: "false"
+              HAS_CORE_JSON: "false"
+              CORE_JSON_PATH: ""
+              BRANCH_NAME: ""
             steps:
               - checkout: self
                 clean: true
@@ -56,17 +56,20 @@ extends:
               - task: UseDotNet@2
                 displayName: Install .NET 10
                 inputs:
-                  packageType: 'sdk'
-                  version: '10.x'
+                  packageType: "sdk"
+                  version: "10.x"
+
+              - task: NuGetAuthenticate@1
+                displayName: NuGet Authenticate
 
               - task: Bash@3
-                displayName: 'Prepare .NET Thanks Data Tool'
+                displayName: "Prepare .NET Thanks Data Tool"
                 env:
                   GITHUB_CLIENTID: $(GITHUB_CLIENTID)
                   GITHUB_CLIENTSECRET: $(GITHUB_CLIENTSECRET)
                   GITHUB_TOKEN: $(GITHUB_TOKEN)
                 inputs:
-                  targetType: 'inline'
+                  targetType: "inline"
                   script: |
                     set +e  # Don't exit on error
 
@@ -84,10 +87,10 @@ extends:
                     dotnet user-secrets set GITHUB_CLIENTSECRET "$GITHUB_CLIENTSECRET"
                     dotnet user-secrets set GITHUB_TOKEN "$GITHUB_TOKEN"
 
-                    dotnet restore
+                    dotnet restore --configfile "$(Build.SourcesDirectory)/NuGet.config"
                     [ $? -ne 0 ] && handle_failure "Failed to restore packages"
 
-                    dotnet build --configuration Release
+                    dotnet build --configuration Release --no-restore
                     [ $? -ne 0 ] && handle_failure "Build failed"
 
                     echo "Preparation completed successfully"
@@ -95,16 +98,16 @@ extends:
                     exit 0
 
               - task: Bash@3
-                displayName: 'Run .NET Thanks Data Tool'
+                displayName: "Run .NET Thanks Data Tool"
                 condition: eq(variables['PREPARATION_SUCCEEDED'], 'true')
                 env:
                   GITHUB_TOKEN: $(GITHUB_TOKEN)
                 inputs:
-                  targetType: 'inline'
+                  targetType: "inline"
                   script: |
                     set -euo pipefail
 
-                    timeout 86400 dotnet run --project dotnetthanks-loader.csproj --configuration Release diff
+                    timeout 86400 dotnet run --no-restore --project dotnetthanks-loader.csproj --configuration Release diff
 
                     if [ -f "core.json" ]; then
                       echo "Generated core.json"
@@ -122,25 +125,25 @@ extends:
                     fi
 
               - task: Bash@3
-                displayName: 'Clone dotnet/website repository'
+                displayName: "Clone dotnet/website repository"
                 condition: eq(variables['HAS_CORE_JSON'], 'true')
                 env:
                   GITHUB_TOKEN: $(GITHUB_TOKEN)
                 inputs:
-                  targetType: 'inline'
+                  targetType: "inline"
                   script: |
                     set -euo pipefail
                     git clone https://$GITHUB_TOKEN@github.com/dotnet/website.git dotnet-website
 
               - task: Bash@3
-                displayName: 'Update Website Repository with New Thanks Data'
+                displayName: "Update Website Repository with New Thanks Data"
                 condition: eq(variables['HAS_CORE_JSON'], 'true')
                 env:
                   GITHUB_TOKEN: $(GITHUB_TOKEN)
                   BUILD_ID: $(Build.BuildId)
                   CORE_JSON_PATH: $(CORE_JSON_PATH)
                 inputs:
-                  targetType: 'inline'
+                  targetType: "inline"
                   script: |
                     set -euo pipefail
 
@@ -193,14 +196,14 @@ extends:
                     echo "Branch '$branch' created and pushed successfully"
 
               - task: Bash@3
-                displayName: 'Create PR for .NET Thanks Data Update'
+                displayName: "Create PR for .NET Thanks Data Update"
                 condition: eq(variables['HAS_CORE_JSON'], 'true')
                 env:
                   GITHUB_TOKEN: $(GITHUB_TOKEN)
                   BUILD_ID: $(Build.BuildId)
                   BRANCH_NAME: $(BRANCH_NAME)
                 inputs:
-                  targetType: 'inline'
+                  targetType: "inline"
                   script: |
                     set -euo pipefail
 
