@@ -1,6 +1,6 @@
 ---
 variables:
-  BuildParameters.RestoreBuildProjects: '**/*.csproj'
+  BuildParameters.RestoreBuildProjects: "**/*.csproj"
   BuildConfiguration: release
   BuildPlatform: anycpu
   Codeql.Enabled: true
@@ -8,7 +8,7 @@ variables:
 trigger:
   branches:
     include:
-      - '*'
+      - "*"
   batch: true
 
 name: $(date:yyyyMMdd)$(rev:.r)
@@ -41,8 +41,8 @@ extends:
             templateContext:
               outputs:
                 - output: pipelineArtifact
-                  displayName: 'Publish Artifacts'
-                  artifactName: 'website-thanks-data'
+                  displayName: "Publish Artifacts"
+                  artifactName: "website-thanks-data"
                   targetPath: $(build.artifactstagingdirectory)
             steps:
               - checkout: self
@@ -51,15 +51,22 @@ extends:
                 inputs:
                   version: 10.x
                   includePreviewVersions: true
+              - task: NuGetAuthenticate@1
+                displayName: NuGet Authenticate
               - task: DotNetCoreCLI@2
                 displayName: Build
                 inputs:
+                  command: build
                   projects: $(BuildParameters.RestoreBuildProjects)
                   arguments: --configuration $(BuildConfiguration)
+                  feedsToUse: config
+                  nugetConfigPath: NuGet.config
               - task: DotNetCoreCLI@2
-                displayName: 'Publish'
+                displayName: "Publish"
                 inputs:
                   command: publish
                   publishWebProjects: false
-                  arguments: '--configuration $(BuildConfiguration) --output $(Build.ArtifactStagingDirectory)'
+                  arguments: "--configuration $(BuildConfiguration) --output $(Build.ArtifactStagingDirectory)"
                   zipAfterPublish: true
+                  feedsToUse: config
+                  nugetConfigPath: NuGet.config
