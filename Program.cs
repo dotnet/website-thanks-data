@@ -138,13 +138,13 @@ namespace dotnetthanks_loader
             // Write dotnet-docker contributors to a separate JSON file for historical tracking
             // Merge with existing dotnetdocker-contributors.json if it exists
             var dockerContribPath = "./dotnetdocker-contributors.json";
-            Dictionary<string, List<Contributor>> mergedDockerContributors = new(dotnetDockerContributors);
+            Dictionary<string, DockerVersionSnapshot> mergedDockerContributors = new(dotnetDockerContributors);
             if (File.Exists(dockerContribPath))
             {
                 try
                 {
                     var existingJson = File.ReadAllText(dockerContribPath);
-                    var existing = JsonSerializer.Deserialize<Dictionary<string, List<Contributor>>>(existingJson, _jsonOptions);
+                    var existing = JsonSerializer.Deserialize<Dictionary<string, DockerVersionSnapshot>>(existingJson, _jsonOptions);
                     if (existing != null)
                     {
                         foreach (var kvp in existing)
@@ -172,11 +172,11 @@ namespace dotnetthanks_loader
         /// <summary>
         /// Process dotnet-docker repo contributions for all .NET versions and return a dictionary for historical tracking.
         /// </summary>
-        private static async Task<Dictionary<string, List<Contributor>>> ProcessDotnetDockerContributionsWithResultAsync(
+        private static async Task<Dictionary<string, DockerVersionSnapshot>> ProcessDotnetDockerContributionsWithResultAsync(
             IGitHubService gitHubService,
             Dictionary<string, MajorRelease> majorReleasesDictionary)
         {
-            var versionContributors = new Dictionary<string, List<Contributor>>();
+            var versionContributors = new Dictionary<string, DockerVersionSnapshot>();
             var latestShas = new Dictionary<string, string>();
             // Try to load latest SHAs from dotnetdocker-contributors.json if present
             var dockerContribPath = "./dotnetdocker-contributors.json";
@@ -191,12 +191,11 @@ namespace dotnetthanks_loader
                         foreach (var prop in doc.RootElement.EnumerateObject())
                         {
                             var version = prop.Name;
-                            var contributors = prop.Value;
-                            if (contributors.ValueKind == JsonValueKind.Array && contributors.GetArrayLength() > 0)
+                            var snapshot = prop.Value;
+                            if (snapshot.ValueKind == JsonValueKind.Object)
                             {
-                                // Find the latest commit SHA for this version (if present)
-                                var first = contributors[0];
-                                if (first.TryGetProperty("LatestSha", out var shaProp))
+                                // Extract LatestSha from the DockerVersionSnapshot object
+                                if (snapshot.TryGetProperty("LatestSha", out var shaProp))
                                 {
                                     latestShas[version] = shaProp.GetString();
                                 }
@@ -226,46 +225,55 @@ namespace dotnetthanks_loader
                 var commitFetchTasks = versionFolders.Select(gitHubService.GetCommitsForPathAsync).ToList();
                 var commitsByFolder = await Task.WhenAll(commitFetchTasks);
 
-                foreach (var commits in commitsByFolder)
-                {
-                    foreach (var commit in commits)
-                    {
-                        if (commit?.Sha is null || !seenShas.Add(commit.Sha)) continue;
-                        if (latestSha != null && commit.Sha == latestSha)
-                        {
-                            // Stop processing older commits
-                            break;
-                        }
-                        var author = commit?.Author;
-                        if (author == null || string.IsNullOrEmpty(author.Login)) continue;
-                        if (BotExclusionConstants.IsBot(author.Login)) continue;
+                // Flatten and globally sort commits newest-first to properly handle latestSha cutoff
+                var orderedCommits = commitsByFolder
+                    .SelectMany(c => c)
+                    .Where(c => c?.Sha != null)
+                    .OrderByDescending(c => c.Commit?.Author?.Date ?? DateTimeOffset.MinValue);
 
-                        if (!allContributors.TryGetValue(author.Login, out var contributor))
-                        {
-                            contributor = new Contributor
-                            {
-                                Name = author.Login,
-                                Link = author.HtmlUrl,
-                                Avatar = author.AvatarUrl,
-                                Count = 1,
-                                Repos = new List<RepoItem> { new RepoItem { Name = RepoConstants.DotnetDockerRepo, Count = 1 } }
-                            };
-                            allContributors[author.Login] = contributor;
-                        }
-                        else
-                        {
-                            contributor.Count += 1;
-                            var repoItem = contributor.Repos.Find(r => r.Name == RepoConstants.DotnetDockerRepo);
-                            if (repoItem == null)
-                                contributor.Repos.Add(new RepoItem { Name = RepoConstants.DotnetDockerRepo, Count = 1 });
-                            else
-                                repoItem.Count += 1;
-                        }
-                        totalCommits++;
+                foreach (var commit in orderedCommits)
+                {
+                    if (!seenShas.Add(commit.Sha)) continue;
+
+                    // If we hit the cutoff SHA, all remaining commits are older - stop processing
+                    if (latestSha != null && commit.Sha == latestSha) 
+                    {
+                        _logger.Debug($"Reached cutoff SHA {latestSha} for .NET {versionKey}, stopping");
+                        break;
                     }
+
+                    var author = commit.Author;
+                    if (author == null || string.IsNullOrEmpty(author.Login)) continue;
+                    if (BotExclusionConstants.IsBot(author.Login)) continue;
+
+                    if (!allContributors.TryGetValue(author.Login, out var contributor))
+                    {
+                        contributor = new Contributor
+                        {
+                            Name = author.Login,
+                            Link = author.HtmlUrl,
+                            Avatar = author.AvatarUrl,
+                            Count = 1,
+                            Repos = new List<RepoItem> { new RepoItem { Name = RepoConstants.DotnetDockerRepo, Count = 1 } }
+                        };
+                        allContributors[author.Login] = contributor;
+                    }
+                    else
+                    {
+                        contributor.Count += 1;
+                        var repoItem = contributor.Repos.Find(r => r.Name == RepoConstants.DotnetDockerRepo);
+                        if (repoItem == null)
+                            contributor.Repos.Add(new RepoItem { Name = RepoConstants.DotnetDockerRepo, Count = 1 });
+                        else
+                            repoItem.Count += 1;
+                    }
+                    totalCommits++;
                 }
 
                 // Add or update contributors in MajorRelease
+                // Ensure Contributors list is initialized (defensive check for deserialized data)
+                majorRelease.Contributors ??= [];
+
                 foreach (var contributor in allContributors.Values)
                 {
                     var existing = majorRelease.Contributors.FirstOrDefault(c => c.Link == contributor.Link);
@@ -296,23 +304,24 @@ namespace dotnetthanks_loader
                     majorRelease.ProcessedReleases.Add(processedKey);
 
                 // Save contributors for this version for historical tracking
-                // Also store the latest SHA for this version if available
                 var contributorsList = allContributors.Values.ToList();
-                if (contributorsList.Count > 0 && versionFolders.Count > 0)
+
+                // Determine the newest commit SHA (from first commit in first folder if available)
+                string newestSha = latestSha;
+                if (versionFolders.Count > 0)
                 {
-                    // Find the newest commit SHA we processed (first commit in first folder)
                     var newestCommits = await gitHubService.GetCommitsForPathAsync(versionFolders[0]);
                     if (newestCommits.Count > 0)
                     {
-                        var newestSha = newestCommits[0].Sha;
-                        foreach (var c in contributorsList)
-                        {
-                            // Store the latest SHA as a property (for serialization)
-                            c.GetType().GetProperty("LatestSha")?.SetValue(c, newestSha);
-                        }
+                        newestSha = newestCommits[0].Sha;
                     }
                 }
-                versionContributors[versionKey] = contributorsList;
+
+                versionContributors[versionKey] = new DockerVersionSnapshot
+                {
+                    LatestSha = newestSha,
+                    Contributors = contributorsList
+                };
             }
             return versionContributors;
         }
@@ -396,7 +405,7 @@ namespace dotnetthanks_loader
 
             // Process dotnet-docker contributions and collect contributors per version (diff mode)
             var dotnetDockerContributors = await ProcessDotnetDockerContributionsWithResultAsync(gitHubService, majorReleasesDictionary);
-            bool dockerHasChanges = dotnetDockerContributors.Any(kvp => kvp.Value.Count > 0);
+            bool dockerHasChanges = dotnetDockerContributors.Any(kvp => kvp.Value.Contributors.Count > 0);
 
             if (hasChanges || dockerHasChanges)
             {
@@ -404,13 +413,13 @@ namespace dotnetthanks_loader
                 {
                     // Merge with existing dotnetdocker-contributors.json if it exists
                     var dockerContribPath = "./dotnetdocker-contributors.json";
-                    Dictionary<string, List<Contributor>> mergedDockerContributors = new(dotnetDockerContributors);
+                    Dictionary<string, DockerVersionSnapshot> mergedDockerContributors = new(dotnetDockerContributors);
                     if (File.Exists(dockerContribPath))
                     {
                         try
                         {
                             var existingJson = File.ReadAllText(dockerContribPath);
-                            var existing = JsonSerializer.Deserialize<Dictionary<string, List<Contributor>>>(existingJson, _jsonOptions);
+                            var existing = JsonSerializer.Deserialize<Dictionary<string, DockerVersionSnapshot>>(existingJson, _jsonOptions);
                             if (existing != null)
                             {
                                 foreach (var kvp in existing)
