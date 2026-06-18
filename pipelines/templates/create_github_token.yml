@@ -1,0 +1,28 @@
+steps:
+  - task: AzureCLI@2
+    displayName: "Fetch GH key"
+    inputs:
+      azureSubscription: $(azureServiceConnection)
+      scriptType: "pscore"
+      scriptLocation: "inlineScript"
+      inlineScript: |
+        $secretValue = az keyvault secret show `
+          --name $(gh_key) `
+          --vault-name $(gh_keyVaultDev) `
+          --query value -o tsv
+
+        if (-not $secretValue) {
+          throw "Failed to retrieve GitHub app private key from Key Vault."
+        }
+
+        echo "##vso[task.setVariable variable=gh_privateKey;issecret=true]$secretValue"
+  - task: PowerShell@2
+    displayName: "Fetch GitHub token"
+    inputs:
+      targetType: "filePath"
+      filePath: "scripts/gh-fetch-cred.ps1"
+      arguments: >
+        -clientId "$(gh_clientId)"
+      pwsh: true
+    env:
+      RAW_PRIVATE_KEY: $(gh_privateKey)
