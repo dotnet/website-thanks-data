@@ -58,7 +58,7 @@ extends:
                 inputs:
                   packageType: 'sdk'
                   version: '10.x'
-              - template: templates/create_github_token.yml@self
+              - template: pipelines/templates/create_github_token.yml@self
               - task: Bash@3
                 displayName: 'Prepare .NET Thanks Data Tool'
                 env:
