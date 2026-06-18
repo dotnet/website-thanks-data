@@ -76,7 +76,6 @@ extends:
                       exit 0
                     }
 
-                    echo "$GITHUB_TOKEN"
                     dotnet user-secrets init
                     [ $? -ne 0 ] && handle_failure "Failed to initialize user secrets"
 
@@ -130,7 +129,7 @@ extends:
                   targetType: 'inline'
                   script: |
                     set -euo pipefail
-                    git clone https://$GITHUB_TOKEN@github.com/dotnet/website.git dotnet-website
+                    git -c http.extraheader="AUTHORIZATION: bearer $GITHUB_TOKEN" clone https://github.com/dotnet/website.git dotnet-website
 
               - task: Bash@3
                 displayName: 'Update Website Repository with New Thanks Data'
@@ -149,10 +148,10 @@ extends:
                     # Configure git
                     git config --global user.email "bot@azuredevops.com"
                     git config --global user.name "azure-pipelines"
-                    git remote set-url origin "https://$GITHUB_TOKEN@github.com/dotnet/website.git"
+                    git remote set-url origin "https://github.com/dotnet/website.git"
 
                     # Sync with remote
-                    git fetch origin main
+                    git -c http.extraheader="AUTHORIZATION: bearer $GITHUB_TOKEN" fetch origin main
                     git checkout main
                     git reset --hard origin/main
 
@@ -187,7 +186,7 @@ extends:
 
                     # Commit and push
                     git commit -m "Update .NET thanks data"
-                    git push origin "HEAD:$branch"
+                    git -c http.extraheader="AUTHORIZATION: bearer $GITHUB_TOKEN" push origin "HEAD:$branch"
 
                     echo "##vso[task.setvariable variable=BRANCH_NAME]$branch"
                     echo "Branch '$branch' created and pushed successfully"
