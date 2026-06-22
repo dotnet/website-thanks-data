@@ -58,7 +58,7 @@ extends:
                 inputs:
                   packageType: 'sdk'
                   version: '10.x'
-
+              - template: pipelines/templates/create_github_token.yml@self
               - task: Bash@3
                 displayName: 'Prepare .NET Thanks Data Tool'
                 env:
@@ -76,7 +76,6 @@ extends:
                       exit 0
                     }
 
-                    echo "$GITHUB_TOKEN"
                     dotnet user-secrets init
                     [ $? -ne 0 ] && handle_failure "Failed to initialize user secrets"
 
@@ -130,7 +129,7 @@ extends:
                   targetType: 'inline'
                   script: |
                     set -euo pipefail
-                    git clone https://$GITHUB_TOKEN@github.com/dotnet/website.git dotnet-website
+                    git clone https://x-access-token:$GITHUB_TOKEN@github.com/dotnet/website.git dotnet-website
 
               - task: Bash@3
                 displayName: 'Update Website Repository with New Thanks Data'
@@ -149,7 +148,7 @@ extends:
                     # Configure git
                     git config --global user.email "bot@azuredevops.com"
                     git config --global user.name "azure-pipelines"
-                    git remote set-url origin "https://$GITHUB_TOKEN@github.com/dotnet/website.git"
+                    git remote set-url origin "https://x-access-token:$GITHUB_TOKEN@github.com/dotnet/website.git"
 
                     # Sync with remote
                     git fetch origin main
