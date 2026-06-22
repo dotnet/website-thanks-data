@@ -97,7 +97,6 @@ try {
 
 	Write-Host "Installation token check passed."
 	Write-Host "Token expires at: $($tokenResponse.expires_at)"
-	Write-Host "##vso[task.setVariable variable=hasToken]true"
 	Write-Host "##vso[task.setVariable variable=GITHUB_TOKEN;issecret=true]$($tokenResponse.token)"
 	
 } catch {
