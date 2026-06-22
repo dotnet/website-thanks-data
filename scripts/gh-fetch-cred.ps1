@@ -53,7 +53,7 @@ $header = ConvertTo-Base64Url ([System.Text.Encoding]::UTF8.GetBytes((ConvertTo-
 $payload = ConvertTo-Base64Url ([System.Text.Encoding]::UTF8.GetBytes((ConvertTo-Json -InputObject @{
 	iat = [System.DateTimeOffset]::UtcNow.AddSeconds(-10).ToUnixTimeSeconds()
 	exp = [System.DateTimeOffset]::UtcNow.AddMinutes(10).ToUnixTimeSeconds()
-	iss = $ClientId
+	iss = $clientId
 } -Compress)))
 
 
@@ -112,8 +112,10 @@ try {
 		Write-Host "GitHub API call failed: $($_.Exception.Message)"
 	}
 
-	Write-Host "##vso[task.setVariable variable=hasToken]false"
+	Write-Host "##vso[task.complete result=Failed;]Unable to fetch GitHub installation token."
 }
 finally {
-	$rsa.Dispose()
+	if ($rsa) {
+		$rsa.Dispose()
+	}
 }
