@@ -2,6 +2,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using System.Text.Encodings.Web;
 using System.Text.Json;
+using dotnetthanks_loader;
 
 namespace dotnetthanks_loader
 {
@@ -37,14 +38,14 @@ namespace dotnetthanks_loader
             var gitHubService = serviceProvider.GetRequiredService<IGitHubService>();
             var contributorService = serviceProvider.GetRequiredService<IContributorService>();
 
-            var repo = "core";
+            var repo = RepoConstants.DotnetRepo;
             var owner = "dotnet";
 
             // Load all releases using GitHubService in parallel
             _logger.Info("Loading releases...");
             var allReleasesTask = gitHubService.GetReleasesAsync(owner, repo);
-            var aspireReleasesTask = gitHubService.GetReleasesAsync("dotnet", "aspire");
-            var mauiReleasesTask = gitHubService.GetReleasesAsync("dotnet", "maui");
+            var aspireReleasesTask = gitHubService.GetReleasesAsync("dotnet", RepoConstants.AspireRepo);
+            var mauiReleasesTask = gitHubService.GetReleasesAsync("dotnet", RepoConstants.MauiRepo);
 
             await Task.WhenAll(allReleasesTask, aspireReleasesTask, mauiReleasesTask);
 
@@ -120,18 +121,209 @@ namespace dotnetthanks_loader
             _logger.Info($"\nProcessing Aspire releases... - {sortedAspireReleases.Count}");
             await ProcessExternalReleasesAsync(
                 gitHubService, contributorService, sortedAspireReleases, majorReleasesDictionary,
-                "aspire", VersionMapper.MapAspireVersionToDotNet);
+                RepoConstants.AspireRepo, VersionMapper.MapAspireVersionToDotNet);
 
             // Process MAUI releases
             _logger.Info($"\nProcessing MAUI releases... - {sortedMauiReleases.Count}");
             await ProcessExternalReleasesAsync(
                 gitHubService, contributorService, sortedMauiReleases, majorReleasesDictionary,
-                "maui", VersionMapper.MapMauiVersionToDotNet);
+                RepoConstants.MauiRepo, VersionMapper.MapMauiVersionToDotNet);
 
+            // Process dotnet-docker contributions for all .NET versions
+            _logger.Info($"\nProcessing {RepoConstants.DotnetDockerRepo} contributions for all .NET versions...");
+
+            // Process dotnet-docker contributions and collect contributors per version
+            var dotnetDockerContributors = await ProcessDotnetDockerContributionsWithResultAsync(gitHubService, majorReleasesDictionary);
+
+            // Write dotnet-docker contributors to a separate JSON file for historical tracking
+            // Merge with existing dotnetdocker-contributors.json if it exists
+            var dockerContribPath = "./dotnetdocker-contributors.json";
+            Dictionary<string, DockerVersionSnapshot> mergedDockerContributors = new(dotnetDockerContributors);
+            if (File.Exists(dockerContribPath))
+            {
+                try
+                {
+                    var existingJson = File.ReadAllText(dockerContribPath);
+                    var existing = JsonSerializer.Deserialize<Dictionary<string, DockerVersionSnapshot>>(existingJson, _jsonOptions);
+                    if (existing != null)
+                    {
+                        foreach (var kvp in existing)
+                        {
+                            if (!mergedDockerContributors.ContainsKey(kvp.Key))
+                                mergedDockerContributors[kvp.Key] = kvp.Value;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error($"Failed to merge with existing dotnetdocker-contributors.json: {ex.Message}");
+                }
+            }
+            File.WriteAllText(dockerContribPath, JsonSerializer.Serialize(mergedDockerContributors, _jsonOptions));
+            _logger.Info($"\n{RepoConstants.DotnetDockerRepo} contributors written to ./dotnetdocker-contributors.json");
+            
             // Write results
             var sortedList = majorReleasesDictionary.Values.ToList();
             File.WriteAllText($"./{repo}.json", JsonSerializer.Serialize(sortedList, _jsonOptions));
             _logger.Info($"\nResults written to ./{repo}.json");
+
+        }
+
+        /// <summary>
+        /// Process dotnet-docker repo contributions for all .NET versions and return a dictionary for historical tracking.
+        /// </summary>
+        private static async Task<Dictionary<string, DockerVersionSnapshot>> ProcessDotnetDockerContributionsWithResultAsync(
+            IGitHubService gitHubService,
+            Dictionary<string, MajorRelease> majorReleasesDictionary)
+        {
+            var versionContributors = new Dictionary<string, DockerVersionSnapshot>();
+            var latestShas = new Dictionary<string, string>();
+            // Try to load latest SHAs from dotnetdocker-contributors.json if present
+            var dockerContribPath = "./dotnetdocker-contributors.json";
+            if (File.Exists(dockerContribPath))
+            {
+                try
+                {
+                    var existingJson = File.ReadAllText(dockerContribPath);
+                    using var doc = JsonDocument.Parse(existingJson);
+                    if (doc.RootElement.ValueKind == JsonValueKind.Object)
+                    {
+                        foreach (var prop in doc.RootElement.EnumerateObject())
+                        {
+                            var version = prop.Name;
+                            var snapshot = prop.Value;
+                            if (snapshot.ValueKind == JsonValueKind.Object)
+                            {
+                                // Extract LatestSha from the DockerVersionSnapshot object
+                                if (snapshot.TryGetProperty("LatestSha", out var shaProp))
+                                {
+                                    latestShas[version] = shaProp.GetString();
+                                }
+                            }
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            foreach (var kvp in majorReleasesDictionary)
+            {
+                var versionKey = kvp.Key; // e.g., "10.0"
+                var majorRelease = kvp.Value;
+                _logger.Info($"Processing {RepoConstants.DotnetDockerRepo} for .NET {versionKey}...");
+
+                // List all src/*/<version>/ folders
+                var versionFolders = await gitHubService.ListDotnetDockerVersionFoldersAsync(versionKey);
+                _logger.Info($"Found {versionFolders.Count} {RepoConstants.DotnetDockerRepo} releases for .NET {versionKey}");
+
+                var allContributors = new Dictionary<string, Contributor>();
+                int totalCommits = 0;
+                string latestSha = latestShas.TryGetValue(versionKey, out var sha) ? sha : null;
+                var seenShas = new HashSet<string>(StringComparer.Ordinal);
+
+                // Fetch commits for all folders in parallel
+                var commitFetchTasks = versionFolders.Select(gitHubService.GetCommitsForPathAsync).ToList();
+                var commitsByFolder = await Task.WhenAll(commitFetchTasks);
+
+                // Flatten and globally sort commits newest-first to properly handle latestSha cutoff
+                var orderedCommits = commitsByFolder
+                    .SelectMany(c => c)
+                    .Where(c => c?.Sha != null)
+                    .OrderByDescending(c => c.Commit?.Author?.Date ?? DateTimeOffset.MinValue);
+
+                foreach (var commit in orderedCommits)
+                {
+                    if (!seenShas.Add(commit.Sha)) continue;
+
+                    // If we hit the cutoff SHA, all remaining commits are older - stop processing
+                    if (latestSha != null && commit.Sha == latestSha) 
+                    {
+                        _logger.Debug($"Reached cutoff SHA {latestSha} for .NET {versionKey}, stopping");
+                        break;
+                    }
+
+                    var author = commit.Author;
+                    if (author == null || string.IsNullOrEmpty(author.Login)) continue;
+                    if (BotExclusionConstants.IsBot(author.Login)) continue;
+
+                    if (!allContributors.TryGetValue(author.Login, out var contributor))
+                    {
+                        contributor = new Contributor
+                        {
+                            Name = author.Login,
+                            Link = author.HtmlUrl,
+                            Avatar = author.AvatarUrl,
+                            Count = 1,
+                            Repos = new List<RepoItem> { new RepoItem { Name = RepoConstants.DotnetDockerRepo, Count = 1 } }
+                        };
+                        allContributors[author.Login] = contributor;
+                    }
+                    else
+                    {
+                        contributor.Count += 1;
+                        var repoItem = contributor.Repos.Find(r => r.Name == RepoConstants.DotnetDockerRepo);
+                        if (repoItem == null)
+                            contributor.Repos.Add(new RepoItem { Name = RepoConstants.DotnetDockerRepo, Count = 1 });
+                        else
+                            repoItem.Count += 1;
+                    }
+                    totalCommits++;
+                }
+
+                // Add or update contributors in MajorRelease
+                // Ensure Contributors list is initialized (defensive check for deserialized data)
+                majorRelease.Contributors ??= [];
+
+                foreach (var contributor in allContributors.Values)
+                {
+                    var existing = majorRelease.Contributors.FirstOrDefault(c => c.Link == contributor.Link);
+                    if (existing == null)
+                    {
+                        majorRelease.Contributors.Add(contributor);
+                    }
+                    else
+                    {
+                        // Update commit count
+                        existing.Count += contributor.Count;
+                        // Merge/update repo list
+                        foreach (var repoItem in contributor.Repos)
+                        {
+                            var existingRepo = existing.Repos.FirstOrDefault(r => r.Name == repoItem.Name);
+                            if (existingRepo == null)
+                                existing.Repos.Add(new RepoItem { Name = repoItem.Name, Count = repoItem.Count });
+                            else
+                                existingRepo.Count += repoItem.Count;
+                        }
+                    }
+                }
+                majorRelease.Contributions += totalCommits;
+
+                // Mark as processed
+                var processedKey = $"{RepoConstants.DotnetDockerRepo}-{versionKey}";
+                if (!majorRelease.ProcessedReleases.Contains(processedKey))
+                    majorRelease.ProcessedReleases.Add(processedKey);
+
+                // Save contributors for this version for historical tracking
+                var contributorsList = allContributors.Values.ToList();
+
+                // Determine the newest commit SHA (from first commit in first folder if available)
+                string newestSha = latestSha;
+                if (versionFolders.Count > 0)
+                {
+                    var newestCommits = await gitHubService.GetCommitsForPathAsync(versionFolders[0]);
+                    if (newestCommits.Count > 0)
+                    {
+                        newestSha = newestCommits[0].Sha;
+                    }
+                }
+
+                versionContributors[versionKey] = new DockerVersionSnapshot
+                {
+                    LatestSha = newestSha,
+                    Contributors = contributorsList
+                };
+            }
+            return versionContributors;
         }
 
         /// <summary>
@@ -198,7 +390,7 @@ namespace dotnetthanks_loader
                 _logger.Info($"\nProcessing Aspire diffs... - {aspireDiff.Count}");
                 await ProcessExternalReleasesAsync(
                     gitHubService, contributorService, aspireDiff, majorReleasesDictionary,
-                    "aspire", VersionMapper.MapAspireVersionToDotNet);
+                    RepoConstants.AspireRepo, VersionMapper.MapAspireVersionToDotNet);
             }
 
             // Process new MAUI releases
@@ -208,11 +400,44 @@ namespace dotnetthanks_loader
                 _logger.Info($"\nProcessing MAUI diffs... - {mauiDiff.Count}");
                 await ProcessExternalReleasesAsync(
                     gitHubService, contributorService, mauiDiff, majorReleasesDictionary,
-                    "maui", VersionMapper.MapMauiVersionToDotNet);
+                    RepoConstants.MauiRepo, VersionMapper.MapMauiVersionToDotNet);
             }
 
-            if (hasChanges)
+            // Process dotnet-docker contributions and collect contributors per version (diff mode)
+            var dotnetDockerContributors = await ProcessDotnetDockerContributionsWithResultAsync(gitHubService, majorReleasesDictionary);
+            bool dockerHasChanges = dotnetDockerContributors.Any(kvp => kvp.Value.Contributors.Count > 0);
+
+            if (hasChanges || dockerHasChanges)
             {
+                if (dockerHasChanges)
+                {
+                    // Merge with existing dotnetdocker-contributors.json if it exists
+                    var dockerContribPath = "./dotnetdocker-contributors.json";
+                    Dictionary<string, DockerVersionSnapshot> mergedDockerContributors = new(dotnetDockerContributors);
+                    if (File.Exists(dockerContribPath))
+                    {
+                        try
+                        {
+                            var existingJson = File.ReadAllText(dockerContribPath);
+                            var existing = JsonSerializer.Deserialize<Dictionary<string, DockerVersionSnapshot>>(existingJson, _jsonOptions);
+                            if (existing != null)
+                            {
+                                foreach (var kvp in existing)
+                                {
+                                    if (!mergedDockerContributors.ContainsKey(kvp.Key))
+                                        mergedDockerContributors[kvp.Key] = kvp.Value;
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.Error($"Failed to merge with existing dotnetdocker-contributors.json: {ex.Message}");
+                        }
+                    }
+                    File.WriteAllText(dockerContribPath, JsonSerializer.Serialize(mergedDockerContributors, _jsonOptions));
+                    _logger.Info($"\n{RepoConstants.DotnetDockerRepo} contributors written to ./dotnetdocker-contributors.json");
+                }
+
                 var sortedList = majorReleasesDictionary.Values.OrderByDescending(o => o.Version).ToList();
                 File.WriteAllText($"./{repo}.json", JsonSerializer.Serialize(sortedList, _jsonOptions));
                 _logger.Info($"\nResults written to ./{repo}.json");
