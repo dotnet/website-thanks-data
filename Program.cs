@@ -38,14 +38,14 @@ namespace dotnetthanks_loader
             var gitHubService = serviceProvider.GetRequiredService<IGitHubService>();
             var contributorService = serviceProvider.GetRequiredService<IContributorService>();
 
-            var repo = "core";
+            var repo = RepoConstants.DotnetRepo;
             var owner = "dotnet";
 
             // Load all releases using GitHubService in parallel
             _logger.Info("Loading releases...");
             var allReleasesTask = gitHubService.GetReleasesAsync(owner, repo);
-            var aspireReleasesTask = gitHubService.GetReleasesAsync("dotnet", "aspire");
-            var mauiReleasesTask = gitHubService.GetReleasesAsync("dotnet", "maui");
+            var aspireReleasesTask = gitHubService.GetReleasesAsync("dotnet", RepoConstants.AspireRepo);
+            var mauiReleasesTask = gitHubService.GetReleasesAsync("dotnet", RepoConstants.MauiRepo);
 
             await Task.WhenAll(allReleasesTask, aspireReleasesTask, mauiReleasesTask);
 
@@ -121,13 +121,13 @@ namespace dotnetthanks_loader
             _logger.Info($"\nProcessing Aspire releases... - {sortedAspireReleases.Count}");
             await ProcessExternalReleasesAsync(
                 gitHubService, contributorService, sortedAspireReleases, majorReleasesDictionary,
-                "aspire", VersionMapper.MapAspireVersionToDotNet);
+                RepoConstants.AspireRepo, VersionMapper.MapAspireVersionToDotNet);
 
             // Process MAUI releases
             _logger.Info($"\nProcessing MAUI releases... - {sortedMauiReleases.Count}");
             await ProcessExternalReleasesAsync(
                 gitHubService, contributorService, sortedMauiReleases, majorReleasesDictionary,
-                "maui", VersionMapper.MapMauiVersionToDotNet);
+                RepoConstants.MauiRepo, VersionMapper.MapMauiVersionToDotNet);
 
             // Process dotnet-docker contributions for all .NET versions
             _logger.Info($"\nProcessing {RepoConstants.DotnetDockerRepo} contributions for all .NET versions...");
@@ -390,7 +390,7 @@ namespace dotnetthanks_loader
                 _logger.Info($"\nProcessing Aspire diffs... - {aspireDiff.Count}");
                 await ProcessExternalReleasesAsync(
                     gitHubService, contributorService, aspireDiff, majorReleasesDictionary,
-                    "aspire", VersionMapper.MapAspireVersionToDotNet);
+                    RepoConstants.AspireRepo, VersionMapper.MapAspireVersionToDotNet);
             }
 
             // Process new MAUI releases
@@ -400,7 +400,7 @@ namespace dotnetthanks_loader
                 _logger.Info($"\nProcessing MAUI diffs... - {mauiDiff.Count}");
                 await ProcessExternalReleasesAsync(
                     gitHubService, contributorService, mauiDiff, majorReleasesDictionary,
-                    "maui", VersionMapper.MapMauiVersionToDotNet);
+                    RepoConstants.MauiRepo, VersionMapper.MapMauiVersionToDotNet);
             }
 
             // Process dotnet-docker contributions and collect contributors per version (diff mode)
