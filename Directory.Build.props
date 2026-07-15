@@ -1,0 +1,6 @@
+<Project>
+  <PropertyGroup>
+    <!-- CFS: restore-time NuGet audit fetches advisory data from api.nuget.org; disable to keep all traffic on the internal feed -->
+    <NuGetAudit>false</NuGetAudit>
+  </PropertyGroup>
+</Project>
