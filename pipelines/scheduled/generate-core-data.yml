@@ -63,6 +63,10 @@ extends:
                   packageType: 'sdk'
                   version: '10.x'
               - template: pipelines/templates/create_github_token.yml@self
+  
+              - task: NuGetAuthenticate@1
+                displayName: NuGet Authenticate
+
               - task: Bash@3
                 displayName: "Prepare .NET Thanks Data Tool"
                 env:
