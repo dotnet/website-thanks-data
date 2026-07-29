@@ -203,7 +203,10 @@ namespace dotnetthanks_loader
                         }
                     }
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    _logger.Error(ex, "Failed to read existing dotnetdocker-contributors.json for LatestSha cache");
+                }
             }
 
             foreach (var kvp in majorReleasesDictionary)
@@ -229,7 +232,8 @@ namespace dotnetthanks_loader
                 var orderedCommits = commitsByFolder
                     .SelectMany(c => c)
                     .Where(c => c?.Sha != null)
-                    .OrderByDescending(c => c.Commit?.Author?.Date ?? DateTimeOffset.MinValue);
+                    .OrderByDescending(c => c.Commit?.Author?.Date ?? DateTimeOffset.MinValue)
+                    .ToList();
 
                 foreach (var commit in orderedCommits)
                 {
@@ -306,16 +310,8 @@ namespace dotnetthanks_loader
                 // Save contributors for this version for historical tracking
                 var contributorsList = allContributors.Values.ToList();
 
-                // Determine the newest commit SHA (from first commit in first folder if available)
-                string newestSha = latestSha;
-                if (versionFolders.Count > 0)
-                {
-                    var newestCommits = await gitHubService.GetCommitsForPathAsync(versionFolders[0]);
-                    if (newestCommits.Count > 0)
-                    {
-                        newestSha = newestCommits[0].Sha;
-                    }
-                }
+                // Determine the newest commit SHA from already-fetched ordered commits.
+                string newestSha = orderedCommits.Count > 0 ? orderedCommits[0].Sha : latestSha;
 
                 versionContributors[versionKey] = new DockerVersionSnapshot
                 {

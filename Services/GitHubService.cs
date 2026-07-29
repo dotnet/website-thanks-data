@@ -250,7 +250,6 @@ namespace dotnetthanks_loader
         {
             var owner = "dotnet";
             var repo = RepoConstants.DotnetDockerRepo;
-            var results = new List<string>();
             try
             {
                 // List all directories under src/
@@ -261,21 +260,21 @@ namespace dotnetthanks_loader
                     {
                         var subdir = item.Path; // e.g., src/runtime
                         var subContents = await ExecuteWithRateLimitAsync(() => _ghclient.Repository.Content.GetAllContentsByRef(owner, repo, subdir, "main"));
-                        foreach (var subItem in subContents)
-                        {
-                            if (subItem.Type == ContentType.Dir)
-                            {
-                                results.Add(subItem.Path); // e.g., src/runtime/10.0
-                            }
-                        }
+                        return subContents
+                            .Where(subItem => subItem.Type == ContentType.Dir)
+                            .Select(subItem => subItem.Path)
+                            .ToList();
                     });
-                await Task.WhenAll(subTasks);
+
+                var subResults = await Task.WhenAll(subTasks);
+                return subResults.SelectMany(paths => paths).ToList();
             }
             catch (Exception ex)
             {
                 _logger.Error(ex, $"Failed to list all dotnet-docker version folders");
             }
-            return results;
+
+            return [];
         }
 
         /// <summary>
