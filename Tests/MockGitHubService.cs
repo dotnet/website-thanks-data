@@ -129,6 +129,36 @@ namespace dotnetthanks_loader.Tests
             return results;
         }
 
+        public Task<IReadOnlyList<string>> ListAllDotnetDockerVersionFoldersAsync()
+        {
+            var folders = new List<string>
+            {
+                "src/runtime/10.0",
+                "src/aspnet/10.0",
+                "src/runtime/9.0",
+                "src/aspnet/9.0"
+            };
+            return Task.FromResult((IReadOnlyList<string>)folders);
+        }
+
+        public Task<IReadOnlyList<string>> ListDotnetDockerVersionFoldersAsync(string version)
+        {
+            var folders = new List<string>
+            {
+                $"src/runtime/{version}",
+                $"src/aspnet/{version}"
+            };
+            return Task.FromResult((IReadOnlyList<string>)folders);
+        }
+
+        public Task<IReadOnlyList<Octokit.GitHubCommit>> GetCommitsForPathAsync(string path)
+        {
+            // Return a mock list of commits for the given path
+            // In real tests, you may want to load this from a fixture file
+            var commits = new List<Octokit.GitHubCommit>();
+            return Task.FromResult((IReadOnlyList<Octokit.GitHubCommit>)commits);
+        }
+
         private static string SanitizeRefForFilename(string refName)
         {
             // Replace characters that are invalid in filenames
