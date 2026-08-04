@@ -209,14 +209,28 @@ namespace dotnetthanks_loader
                 }
             }
 
+            // Fetch all docker version folders once and filter per version in memory
+            var allDockerVersionFolders = await gitHubService.ListAllDotnetDockerVersionFoldersAsync();
+
             foreach (var kvp in majorReleasesDictionary)
             {
                 var versionKey = kvp.Key; // e.g., "10.0"
                 var majorRelease = kvp.Value;
+
+                // Skip versions already fully processed for this repo
+                var processedKey = $"{RepoConstants.DotnetDockerRepo}-{versionKey}";
+                if (majorRelease.ProcessedReleases.Contains(processedKey))
+                {
+                    _logger.Info($"Skipping {RepoConstants.DotnetDockerRepo} for .NET {versionKey}, already processed");
+                    continue;
+                }
+
                 _logger.Info($"Processing {RepoConstants.DotnetDockerRepo} for .NET {versionKey}...");
 
-                // List all src/*/<version>/ folders
-                var versionFolders = await gitHubService.ListDotnetDockerVersionFoldersAsync(versionKey);
+                // Filter folders for this version from the already-fetched list
+                var versionFolders = allDockerVersionFolders
+                    .Where(path => path.EndsWith($"/{versionKey}", StringComparison.Ordinal))
+                    .ToList();
                 _logger.Info($"Found {versionFolders.Count} {RepoConstants.DotnetDockerRepo} releases for .NET {versionKey}");
 
                 var allContributors = new Dictionary<string, Contributor>();
@@ -258,7 +272,7 @@ namespace dotnetthanks_loader
                             Link = author.HtmlUrl,
                             Avatar = author.AvatarUrl,
                             Count = 1,
-                            Repos = new List<RepoItem> { new RepoItem { Name = RepoConstants.DotnetDockerRepo, Count = 1 } }
+                            Repos = [new RepoItem { Name = RepoConstants.DotnetDockerRepo, Count = 1 }]
                         };
                         allContributors[author.Login] = contributor;
                     }
@@ -303,7 +317,6 @@ namespace dotnetthanks_loader
                 majorRelease.Contributions += totalCommits;
 
                 // Mark as processed
-                var processedKey = $"{RepoConstants.DotnetDockerRepo}-{versionKey}";
                 if (!majorRelease.ProcessedReleases.Contains(processedKey))
                     majorRelease.ProcessedReleases.Add(processedKey);
 

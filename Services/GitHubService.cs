@@ -280,6 +280,13 @@ namespace dotnetthanks_loader
         /// <summary>
         /// Gets commit history for a given path in dotnet-docker main branch.
         /// </summary>
+        /// <remarks>
+        /// If an error occurs while paging through commits (e.g. a transient API failure), the
+        /// exception is logged and swallowed. Any commits successfully fetched on prior pages
+        /// are still returned; if the failure happens on the first page, an empty list is
+        /// returned. This is intentional so that a single failing path does not abort processing
+        /// of the other paths/versions being processed by the caller.
+        /// </remarks>
         public async Task<IReadOnlyList<Octokit.GitHubCommit>> GetCommitsForPathAsync(string path)
         {
             var owner = "dotnet";

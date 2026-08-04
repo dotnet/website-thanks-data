@@ -129,10 +129,20 @@ namespace dotnetthanks_loader.Tests
             return results;
         }
 
+        public Task<IReadOnlyList<string>> ListAllDotnetDockerVersionFoldersAsync()
+        {
+            var folders = new List<string>
+            {
+                "src/runtime/10.0",
+                "src/aspnet/10.0",
+                "src/runtime/9.0",
+                "src/aspnet/9.0"
+            };
+            return Task.FromResult((IReadOnlyList<string>)folders);
+        }
+
         public Task<IReadOnlyList<string>> ListDotnetDockerVersionFoldersAsync(string version)
         {
-            // Return a mock list of folders for the given version
-            // In real tests, you may want to load this from a fixture file
             var folders = new List<string>
             {
                 $"src/runtime/{version}",
