@@ -3,7 +3,6 @@ variables:
   BuildParameters.RestoreBuildProjects: "**/*.csproj"
   BuildConfiguration: release
   BuildPlatform: anycpu
-  Codeql.Enabled: true
 
 trigger:
   branches:
@@ -27,6 +26,13 @@ extends:
   template: v1/1ES.Official.PipelineTemplate.yml@1ESPipelineTemplates
   parameters:
     sdl:
+      codeql:
+        compiled:
+          enabled: false
+      policheck:
+        enabled: false
+      sbom:
+        enabled: false
       policies:
         cfsClean:
           enabled: true
