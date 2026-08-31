@@ -52,7 +52,7 @@ extends:
               outputs:
                 - output: pipelineArtifact
                   displayName: "Publish Artifacts"
-                  artifactName: "website-thanks-data"
+                  artifactName: "website-thanks-data-drop"
                   targetPath: $(build.artifactstagingdirectory)
             steps:
               - checkout: self
