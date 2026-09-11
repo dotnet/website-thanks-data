@@ -40,5 +40,25 @@ namespace dotnetthanks_loader
         /// <param name="body">The release body markdown content</param>
         /// <returns>List of child repositories with their tags</returns>
         List<ChildRepo> ParseReleaseBody(string body);
+
+        /// <summary>
+        /// Lists all subdirectories under src/*/* in dotnet-docker (all version folders for all products).
+        /// </summary>
+        Task<IReadOnlyList<string>> ListAllDotnetDockerVersionFoldersAsync();
+
+        /// <summary>
+        /// Lists all subdirectories under src/ in dotnet-docker for a given .NET version (e.g., 10.0).
+        /// </summary>
+        Task<IReadOnlyList<string>> ListDotnetDockerVersionFoldersAsync(string version);
+
+        /// <summary>
+        /// Gets commit history for a given path in dotnet-docker main branch.
+        /// </summary>
+        /// <remarks>
+        /// On error, the exception is logged and swallowed; any commits already fetched are
+        /// returned, or an empty list if none were fetched yet. Callers should not rely on a
+        /// non-empty result as proof that no error occurred.
+        /// </remarks>
+        Task<IReadOnlyList<Octokit.GitHubCommit>> GetCommitsForPathAsync(string path);
     }
 }

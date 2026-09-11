@@ -2,7 +2,7 @@ namespace dotnetthanks_loader
 {
     public class MajorRelease
     {
-        public List<Contributor> Contributors { get; set; }
+        public List<Contributor> Contributors { get; set; } = [];
         public int Contributions { get; set; }
         public string Name { get; set; }
         public string Product { get; set; }
