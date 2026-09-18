@@ -13,6 +13,8 @@ namespace dotnetthanks_loader.Tests
     {
         private readonly string _fixturesPath;
         private readonly ILoggingService _logger;
+        public HashSet<string> FailedDockerCommitPaths { get; } = [];
+        public string? DockerCommitFixtureSet { get; set; }
 
         public MockGitHubService(string fixturesPath, ILoggingService? logger = null)
         {
@@ -129,7 +131,7 @@ namespace dotnetthanks_loader.Tests
             return results;
         }
 
-        public Task<IReadOnlyList<string>> ListAllDotnetDockerVersionFoldersAsync()
+        public Task<DockerFolderDiscoveryResult> ListAllDotnetDockerVersionFoldersAsync()
         {
             var folders = new List<string>
             {
@@ -138,25 +140,49 @@ namespace dotnetthanks_loader.Tests
                 "src/runtime/9.0",
                 "src/aspnet/9.0"
             };
-            return Task.FromResult((IReadOnlyList<string>)folders);
+            return Task.FromResult(new DockerFolderDiscoveryResult { Folders = folders });
         }
 
-        public Task<IReadOnlyList<string>> ListDotnetDockerVersionFoldersAsync(string version)
+        public async Task<DockerCommitFetchResult> GetCommitsForPathAsync(string path)
         {
-            var folders = new List<string>
+            if (FailedDockerCommitPaths.Contains(path))
+                return new DockerCommitFetchResult { Path = path, Succeeded = false };
+
+            if (DockerCommitFixtureSet == null)
+                return new DockerCommitFetchResult { Path = path, Succeeded = true };
+
+            var fixtureName = path.Replace("/", "-").Replace("\\", "-") + ".json";
+            var filePath = Path.Combine(_fixturesPath, "docker", DockerCommitFixtureSet, fixtureName);
+            if (!File.Exists(filePath))
             {
-                $"src/runtime/{version}",
-                $"src/aspnet/{version}"
+                _logger.Warning($"Docker commit fixture file not found: {filePath}");
+                return new DockerCommitFetchResult { Path = path, Succeeded = false };
+            }
+
+            var json = await File.ReadAllTextAsync(filePath);
+            var fixtures = JsonSerializer.Deserialize<List<CommitFixture>>(json) ?? [];
+            var commits = fixtures.Select(CreateDockerCommit).ToList();
+
+            return new DockerCommitFetchResult
+            {
+                Path = path,
+                Commits = commits,
+                Succeeded = true
             };
-            return Task.FromResult((IReadOnlyList<string>)folders);
         }
 
-        public Task<IReadOnlyList<Octokit.GitHubCommit>> GetCommitsForPathAsync(string path)
+        private static Octokit.GitHubCommit CreateDockerCommit(CommitFixture fixture)
         {
-            // Return a mock list of commits for the given path
-            // In real tests, you may want to load this from a fixture file
-            var commits = new List<Octokit.GitHubCommit>();
-            return Task.FromResult((IReadOnlyList<Octokit.GitHubCommit>)commits);
+            var author = new Octokit.Committer(fixture.AuthorName, "test@example.com", fixture.AuthorDate);
+            var commit = new Octokit.Commit(
+                null, null, null, null, fixture.Sha, null, null, "test", author, author,
+                null, [], 0, null);
+            var gitHubAuthor = new Octokit.Author(
+                fixture.AuthorName, 0, null, fixture.AvatarUrl, fixture.AuthorUrl, fixture.AuthorUrl,
+                null, null, null, "User", null, null, null, null, null, null, false);
+            return new Octokit.GitHubCommit(
+                null, null, null, null, fixture.Sha, null, null, gitHubAuthor, null, commit,
+                gitHubAuthor, fixture.AuthorUrl, null, [], []);
         }
 
         private static string SanitizeRefForFilename(string refName)
@@ -195,5 +221,6 @@ namespace dotnetthanks_loader.Tests
         public string AuthorName { get; set; } = "";
         public string AuthorUrl { get; set; } = "";
         public string AvatarUrl { get; set; } = "";
+        public DateTimeOffset AuthorDate { get; set; }
     }
 }

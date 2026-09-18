@@ -44,21 +44,14 @@ namespace dotnetthanks_loader
         /// <summary>
         /// Lists all subdirectories under src/*/* in dotnet-docker (all version folders for all products).
         /// </summary>
-        Task<IReadOnlyList<string>> ListAllDotnetDockerVersionFoldersAsync();
-
-        /// <summary>
-        /// Lists all subdirectories under src/ in dotnet-docker for a given .NET version (e.g., 10.0).
-        /// </summary>
-        Task<IReadOnlyList<string>> ListDotnetDockerVersionFoldersAsync(string version);
+        Task<DockerFolderDiscoveryResult> ListAllDotnetDockerVersionFoldersAsync();
 
         /// <summary>
         /// Gets commit history for a given path in dotnet-docker main branch.
         /// </summary>
         /// <remarks>
-        /// On error, the exception is logged and swallowed; any commits already fetched are
-        /// returned, or an empty list if none were fetched yet. Callers should not rely on a
-        /// non-empty result as proof that no error occurred.
+        /// The result identifies whether all pages were fetched so callers can reject partial data.
         /// </remarks>
-        Task<IReadOnlyList<Octokit.GitHubCommit>> GetCommitsForPathAsync(string path);
+        Task<DockerCommitFetchResult> GetCommitsForPathAsync(string path);
     }
 }

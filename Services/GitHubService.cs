@@ -233,20 +233,11 @@ namespace dotnetthanks_loader
 
             return results;
         }
-        /// <summary>
-        /// Lists all subdirectories under src/*/<version>/ in dotnet-docker for a given .NET version (e.g., 10.0).
-        /// Optimized: fetches all version folders in one set of API calls and filters in memory.
-        /// </summary>
-        public async Task<IReadOnlyList<string>> ListDotnetDockerVersionFoldersAsync(string version)
-        {
-            var allVersionFolders = await ListAllDotnetDockerVersionFoldersAsync();
-            return allVersionFolders.Where(path => path.EndsWith($"/{version}", StringComparison.Ordinal)).ToList();
-        }
 
         /// <summary>
         /// Lists all subdirectories under src/*/* in dotnet-docker (all version folders for all products).
         /// </summary>
-        public async Task<IReadOnlyList<string>> ListAllDotnetDockerVersionFoldersAsync()
+        public async Task<DockerFolderDiscoveryResult> ListAllDotnetDockerVersionFoldersAsync()
         {
             var owner = "dotnet";
             var repo = RepoConstants.DotnetDockerRepo;
@@ -259,35 +250,51 @@ namespace dotnetthanks_loader
                     .Select(async item =>
                     {
                         var subdir = item.Path; // e.g., src/runtime
-                        var subContents = await ExecuteWithRateLimitAsync(() => _ghclient.Repository.Content.GetAllContentsByRef(owner, repo, subdir, "main"));
-                        return subContents
-                            .Where(subItem => subItem.Type == ContentType.Dir)
-                            .Select(subItem => subItem.Path)
-                            .ToList();
+                        try
+                        {
+                            var subContents = await ExecuteWithRateLimitAsync(() => _ghclient.Repository.Content.GetAllContentsByRef(owner, repo, subdir, "main"));
+                            return new DockerFolderDiscoveryResult
+                            {
+                                Folders = subContents
+                                    .Where(subItem => subItem.Type == ContentType.Dir)
+                                    .Select(subItem => subItem.Path)
+                                    .ToList()
+                            };
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.Error(ex, $"Failed to list dotnet-docker folders under {subdir}");
+                            return new DockerFolderDiscoveryResult { FailedPaths = [subdir] };
+                        }
                     });
 
                 var subResults = await Task.WhenAll(subTasks);
-                return subResults.SelectMany(paths => paths).ToList();
+                var failedPaths = subResults.SelectMany(result => result.FailedPaths).ToList();
+                if (failedPaths.Count > 0)
+                    _logger.Error($"dotnet-docker folder discovery failed for {failedPaths.Count} path(s): {string.Join(", ", failedPaths)}");
+
+                return new DockerFolderDiscoveryResult
+                {
+                    Folders = subResults.SelectMany(result => result.Folders).ToList(),
+                    FailedPaths = failedPaths
+                };
             }
             catch (Exception ex)
             {
                 _logger.Error(ex, $"Failed to list all dotnet-docker version folders");
+                _logger.Error("dotnet-docker folder discovery failed for 1 path(s): src");
+                return new DockerFolderDiscoveryResult { FailedPaths = ["src"] };
             }
-
-            return [];
         }
 
         /// <summary>
         /// Gets commit history for a given path in dotnet-docker main branch.
         /// </summary>
         /// <remarks>
-        /// If an error occurs while paging through commits (e.g. a transient API failure), the
-        /// exception is logged and swallowed. Any commits successfully fetched on prior pages
-        /// are still returned; if the failure happens on the first page, an empty list is
-        /// returned. This is intentional so that a single failing path does not abort processing
-        /// of the other paths/versions being processed by the caller.
+        /// If paging fails, the partial commits are returned with Succeeded set to false so the
+        /// caller can report and reject the incomplete version.
         /// </remarks>
-        public async Task<IReadOnlyList<Octokit.GitHubCommit>> GetCommitsForPathAsync(string path)
+        public async Task<DockerCommitFetchResult> GetCommitsForPathAsync(string path)
         {
             var owner = "dotnet";
             var repo = RepoConstants.DotnetDockerRepo;
@@ -312,8 +319,9 @@ namespace dotnetthanks_loader
             catch (Exception ex)
             {
                 _logger.Error(ex, $"Failed to get commits for path {path} in dotnet-docker");
+                return new DockerCommitFetchResult { Path = path, Commits = results, Succeeded = false };
             }
-            return results;
+            return new DockerCommitFetchResult { Path = path, Commits = results, Succeeded = true };
         }
     }
 }
