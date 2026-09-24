@@ -1,4 +1,6 @@
 using dotnetthanks_loader;
+using Octokit;
+using System.Text.Json;
 using Xunit;
 
 namespace dotnetthanks_loader.Tests
@@ -183,6 +185,245 @@ namespace dotnetthanks_loader.Tests
             Assert.False(BotExclusionConstants.IsBot("TestContributor"));
             Assert.False(BotExclusionConstants.IsBot("John Developer"));
             Assert.False(BotExclusionConstants.IsBot("Jane Coder"));
+        }
+
+        [Fact]
+        public void MergeAndWriteDockerContributors_AccumulatesExistingSnapshot()
+        {
+            var outputPath = Path.Combine(Path.GetTempPath(), $"docker-contributors-{Guid.NewGuid()}.json");
+            var existingSnapshots = new Dictionary<string, DockerVersionSnapshot>
+            {
+                ["10.0"] = new DockerVersionSnapshot
+                {
+                    LatestSha = "old-sha",
+                    Contributors =
+                    [
+                        new Contributor
+                        {
+                            Name = "existing",
+                            Link = "https://github.com/existing",
+                            Count = 3,
+                            Repos =
+                            [
+                                new RepoItem { Name = "dotnet-docker", Count = 3 },
+                                new RepoItem { Name = "runtime", Count = 1 }
+                            ]
+                        },
+                        new Contributor
+                        {
+                            Name = "untouched",
+                            Link = "https://github.com/untouched",
+                            Count = 2
+                        }
+                    ]
+                },
+                ["9.0"] = new DockerVersionSnapshot { LatestSha = "nine-sha" }
+            };
+            var currentSnapshots = new Dictionary<string, DockerVersionSnapshot>
+            {
+                ["10.0"] = new DockerVersionSnapshot
+                {
+                    LatestSha = "new-sha",
+                    Contributors =
+                    [
+                        new Contributor
+                        {
+                            Name = "existing",
+                            Link = "https://github.com/existing",
+                            Count = 2,
+                            Repos =
+                            [
+                                new RepoItem { Name = "dotnet-docker", Count = 2 },
+                                new RepoItem { Name = "sdk", Count = 1 }
+                            ]
+                        },
+                        new Contributor
+                        {
+                            Name = "new",
+                            Link = "https://github.com/new",
+                            Count = 1
+                        }
+                    ]
+                }
+            };
+
+            try
+            {
+                File.WriteAllText(outputPath, JsonSerializer.Serialize(existingSnapshots));
+
+                Program.MergeAndWriteDockerContributors(currentSnapshots, outputPath);
+
+                var merged = JsonSerializer.Deserialize<Dictionary<string, DockerVersionSnapshot>>(
+                    File.ReadAllText(outputPath));
+                Assert.NotNull(merged);
+                Assert.Equal("new-sha", merged["10.0"].LatestSha);
+                Assert.Equal("nine-sha", merged["9.0"].LatestSha);
+                Assert.Equal(3, merged["10.0"].Contributors.Count);
+
+                var existing = merged["10.0"].Contributors.Single(
+                    contributor => contributor.Link == "https://github.com/existing");
+                Assert.Equal(5, existing.Count);
+                Assert.Equal(5, existing.Repos.Single(repo => repo.Name == "dotnet-docker").Count);
+                Assert.Equal(1, existing.Repos.Single(repo => repo.Name == "runtime").Count);
+                Assert.Equal(1, existing.Repos.Single(repo => repo.Name == "sdk").Count);
+                Assert.Contains(merged["10.0"].Contributors,
+                    contributor => contributor.Link == "https://github.com/untouched");
+                Assert.Contains(merged["10.0"].Contributors,
+                    contributor => contributor.Link == "https://github.com/new");
+            }
+            finally
+            {
+                File.Delete(outputPath);
+            }
+        }
+
+        [Fact]
+        public async Task DockerCommitFetchFailure_DoesNotAdvanceLatestSha()
+        {
+            var snapshotPath = Path.Combine(Path.GetTempPath(), $"docker-contributors-{Guid.NewGuid()}.json");
+            var majorRelease = new MajorRelease
+            {
+                Contributors = [],
+                Contributions = 0,
+                Name = ".NET 10.0",
+                Product = ".NET",
+                Version = Version.Parse("10.0.0"),
+                Tag = "v10.0",
+                ProcessedReleases = []
+            };
+            var existingSnapshots = new Dictionary<string, DockerVersionSnapshot>
+            {
+                ["10.0"] = new DockerVersionSnapshot { LatestSha = "old-sha" }
+            };
+            _mockGitHubService.FailedDockerCommitPaths.Add("src/runtime/10.0");
+
+            try
+            {
+                File.WriteAllText(snapshotPath, JsonSerializer.Serialize(existingSnapshots));
+
+                var snapshots = await Program.ProcessDotnetDockerContributionsWithResultAsync(
+                    _mockGitHubService,
+                    new Dictionary<string, MajorRelease> { ["10.0"] = majorRelease },
+                    snapshotPath);
+
+                Assert.Equal("old-sha", snapshots["10.0"].LatestSha);
+                Assert.Empty(snapshots["10.0"].Contributors);
+                Assert.Empty(majorRelease.Contributors);
+                Assert.Equal(0, majorRelease.Contributions);
+                Assert.DoesNotContain("dotnet-docker-10.0", majorRelease.ProcessedReleases);
+            }
+            finally
+            {
+                File.Delete(snapshotPath);
+            }
+        }
+
+        [Fact]
+        public async Task DockerContributors_AccumulateAcrossPipelineRuns()
+        {
+            var snapshotPath = Path.Combine(Path.GetTempPath(), $"docker-contributors-{Guid.NewGuid()}.json");
+
+            try
+            {
+                _mockGitHubService.DockerCommitFixtureSet = "run-1";
+                var firstRun = await Program.ProcessDotnetDockerContributionsWithResultAsync(
+                    _mockGitHubService,
+                    CreateDockerMajorReleases(),
+                    snapshotPath);
+                Program.MergeAndWriteDockerContributors(firstRun, snapshotPath);
+
+                _mockGitHubService.DockerCommitFixtureSet = "run-2";
+                var secondRun = await Program.ProcessDotnetDockerContributionsWithResultAsync(
+                    _mockGitHubService,
+                    CreateDockerMajorReleases(),
+                    snapshotPath);
+                Program.MergeAndWriteDockerContributors(secondRun, snapshotPath);
+
+                var persisted = JsonSerializer.Deserialize<Dictionary<string, DockerVersionSnapshot>>(
+                    File.ReadAllText(snapshotPath));
+                Assert.NotNull(persisted);
+
+                var snapshot = persisted["10.0"];
+                Assert.Equal("run2-alice", snapshot.LatestSha);
+                Assert.Equal(5, snapshot.Contributors.Sum(contributor => contributor.Count));
+                Assert.Equal(3, snapshot.Contributors.Count);
+                Assert.DoesNotContain(snapshot.Contributors,
+                    contributor => BotExclusionConstants.IsBot(contributor.Name));
+
+                var alice = snapshot.Contributors.Single(
+                    contributor => contributor.Link == "https://github.com/alice");
+                Assert.Equal(3, alice.Count);
+                Assert.Equal(3, alice.Repos.Single(repo => repo.Name == "dotnet-docker").Count);
+                Assert.Contains(snapshot.Contributors,
+                    contributor => contributor.Link == "https://github.com/bob" && contributor.Count == 1);
+                Assert.Contains(snapshot.Contributors,
+                    contributor => contributor.Link == "https://github.com/charlie" && contributor.Count == 1);
+            }
+            finally
+            {
+                File.Delete(snapshotPath);
+            }
+        }
+
+        [Fact]
+        public void MissingLatestSha_ProcessesAllFetchedCommits()
+        {
+            var commits = new List<GitHubCommit>
+            {
+                CreateDockerCommit("new-sha", DateTimeOffset.Parse("2026-01-02T00:00:00Z")),
+                CreateDockerCommit("older-sha", DateTimeOffset.Parse("2026-01-01T00:00:00Z"))
+            };
+
+            var selected = Program.SelectCommitsAfterCutoff(commits, "missing-sha", out var cutoffFound);
+
+            Assert.False(cutoffFound);
+            Assert.Equal(["new-sha", "older-sha"], selected.Select(commit => commit.Sha));
+        }
+
+        [Fact]
+        public void EqualCutoffTimestamps_DoNotTruncateAmbiguousCommit()
+        {
+            var cutoffDate = DateTimeOffset.Parse("2026-01-01T00:00:00Z");
+            var commits = new List<GitHubCommit>
+            {
+                CreateDockerCommit("new-sha", DateTimeOffset.Parse("2026-01-02T00:00:00Z")),
+                CreateDockerCommit("cutoff-sha", cutoffDate),
+                CreateDockerCommit("same-time-sha", cutoffDate),
+                CreateDockerCommit("old-sha", DateTimeOffset.Parse("2025-12-31T00:00:00Z"))
+            };
+
+            var selected = Program.SelectCommitsAfterCutoff(commits, "cutoff-sha", out var cutoffFound);
+
+            Assert.True(cutoffFound);
+            Assert.Equal(["new-sha", "same-time-sha"], selected.Select(commit => commit.Sha));
+        }
+
+        private static GitHubCommit CreateDockerCommit(string sha, DateTimeOffset authorDate)
+        {
+            var author = new Octokit.Committer("test", "test@example.com", authorDate);
+            var commit = new Octokit.Commit(
+                null, null, null, null, sha, null, null, "test", author, author,
+                null, [], 0, null);
+            return new GitHubCommit(
+                null, null, null, null, sha, null, null, null, null, commit,
+                null, null, null, [], []);
+        }
+
+        private static Dictionary<string, MajorRelease> CreateDockerMajorReleases()
+        {
+            return new Dictionary<string, MajorRelease>
+            {
+                ["10.0"] = new MajorRelease
+                {
+                    Contributors = [],
+                    Contributions = 0,
+                    Name = ".NET 10.0",
+                    Product = ".NET",
+                    Version = Version.Parse("10.0.0"),
+                    Tag = "v10.0",
+                    ProcessedReleases = []
+                }
+            };
         }
     }
 }

@@ -1,0 +1,23 @@
+[
+  {
+    "Sha": "run2-alice",
+    "AuthorName": "alice",
+    "AuthorUrl": "https://github.com/alice",
+    "AvatarUrl": "https://avatars.example/alice",
+    "AuthorDate": "2026-01-05T00:00:00Z"
+  },
+  {
+    "Sha": "run2-bot",
+    "AuthorName": "github-actions[bot]",
+    "AuthorUrl": "https://github.com/apps/github-actions",
+    "AvatarUrl": "https://avatars.example/bot",
+    "AuthorDate": "2026-01-04T12:00:00Z"
+  },
+  {
+    "Sha": "run1-newest",
+    "AuthorName": "alice",
+    "AuthorUrl": "https://github.com/alice",
+    "AvatarUrl": "https://avatars.example/alice",
+    "AuthorDate": "2026-01-03T00:00:00Z"
+  }
+]

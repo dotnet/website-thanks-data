@@ -40,5 +40,18 @@ namespace dotnetthanks_loader
         /// <param name="body">The release body markdown content</param>
         /// <returns>List of child repositories with their tags</returns>
         List<ChildRepo> ParseReleaseBody(string body);
+
+        /// <summary>
+        /// Lists all subdirectories under src/*/* in dotnet-docker (all version folders for all products).
+        /// </summary>
+        Task<DockerFolderDiscoveryResult> ListAllDotnetDockerVersionFoldersAsync();
+
+        /// <summary>
+        /// Gets commit history for a given path in dotnet-docker main branch.
+        /// </summary>
+        /// <remarks>
+        /// The result identifies whether all pages were fetched so callers can reject partial data.
+        /// </remarks>
+        Task<DockerCommitFetchResult> GetCommitsForPathAsync(string path);
     }
 }
