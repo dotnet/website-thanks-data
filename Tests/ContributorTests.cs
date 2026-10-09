@@ -1,4 +1,5 @@
 using dotnetthanks_loader;
+using Octokit;
 using Xunit;
 
 namespace dotnetthanks_loader.Tests
@@ -183,6 +184,68 @@ namespace dotnetthanks_loader.Tests
             Assert.False(BotExclusionConstants.IsBot("TestContributor"));
             Assert.False(BotExclusionConstants.IsBot("John Developer"));
             Assert.False(BotExclusionConstants.IsBot("Jane Coder"));
+        }
+
+        [Fact]
+        public async Task DockerCommitFetchFailure_DoesNotUpdateMajorRelease()
+        {
+            var majorRelease = new MajorRelease
+            {
+                Contributors = [],
+                Contributions = 0,
+                Name = ".NET 10.0",
+                Product = ".NET",
+                Version = Version.Parse("10.0.0"),
+                Tag = "v10.0",
+                ProcessedReleases = []
+            };
+            _mockGitHubService.FailedDockerCommitPaths.Add("src/runtime/10.0");
+
+            var hasChanges = await Program.ProcessDotnetDockerContributionsAsync(
+                _mockGitHubService,
+                new Dictionary<string, MajorRelease> { ["10.0"] = majorRelease });
+
+            Assert.False(hasChanges);
+            Assert.Empty(majorRelease.Contributors);
+            Assert.Equal(0, majorRelease.Contributions);
+            Assert.DoesNotContain("dotnet-docker-10.0", majorRelease.ProcessedReleases);
+        }
+
+        [Fact]
+        public async Task DockerContributions_AreAddedToMajorRelease()
+        {
+            _mockGitHubService.DockerCommitFixtureSet = "run-1";
+            var majorReleases = CreateDockerMajorReleases();
+
+            var hasChanges = await Program.ProcessDotnetDockerContributionsAsync(
+                _mockGitHubService,
+                majorReleases);
+
+            Assert.True(hasChanges);
+            var majorRelease = majorReleases["10.0"];
+            Assert.Equal(3, majorRelease.Contributions);
+            Assert.Contains(majorRelease.Contributors,
+                contributor => contributor.Link == "https://github.com/alice" && contributor.Count == 2);
+            Assert.Contains(majorRelease.Contributors,
+                contributor => contributor.Link == "https://github.com/bob" && contributor.Count == 1);
+            Assert.Contains("dotnet-docker-10.0", majorRelease.ProcessedReleases);
+        }
+
+        private static Dictionary<string, MajorRelease> CreateDockerMajorReleases()
+        {
+            return new Dictionary<string, MajorRelease>
+            {
+                ["10.0"] = new MajorRelease
+                {
+                    Contributors = [],
+                    Contributions = 0,
+                    Name = ".NET 10.0",
+                    Product = ".NET",
+                    Version = Version.Parse("10.0.0"),
+                    Tag = "v10.0",
+                    ProcessedReleases = []
+                }
+            };
         }
     }
 }

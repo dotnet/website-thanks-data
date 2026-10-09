@@ -13,6 +13,8 @@ namespace dotnetthanks_loader.Tests
     {
         private readonly string _fixturesPath;
         private readonly ILoggingService _logger;
+        public HashSet<string> FailedDockerCommitPaths { get; } = [];
+        public string? DockerCommitFixtureSet { get; set; }
 
         public MockGitHubService(string fixturesPath, ILoggingService? logger = null)
         {
@@ -129,6 +131,60 @@ namespace dotnetthanks_loader.Tests
             return results;
         }
 
+        public Task<DockerFolderDiscoveryResult> ListAllDotnetDockerVersionFoldersAsync()
+        {
+            var folders = new List<string>
+            {
+                "src/runtime/10.0",
+                "src/aspnet/10.0",
+                "src/runtime/9.0",
+                "src/aspnet/9.0"
+            };
+            return Task.FromResult(new DockerFolderDiscoveryResult { Folders = folders });
+        }
+
+        public async Task<DockerCommitFetchResult> GetCommitsForPathAsync(string path)
+        {
+            if (FailedDockerCommitPaths.Contains(path))
+                return new DockerCommitFetchResult { Path = path, Succeeded = false };
+
+            if (DockerCommitFixtureSet == null)
+                return new DockerCommitFetchResult { Path = path, Succeeded = true };
+
+            var fixtureName = path.Replace("/", "-").Replace("\\", "-") + ".json";
+            var filePath = Path.Combine(_fixturesPath, "docker", DockerCommitFixtureSet, fixtureName);
+            if (!File.Exists(filePath))
+            {
+                _logger.Warning($"Docker commit fixture file not found: {filePath}");
+                return new DockerCommitFetchResult { Path = path, Succeeded = false };
+            }
+
+            var json = await File.ReadAllTextAsync(filePath);
+            var fixtures = JsonSerializer.Deserialize<List<CommitFixture>>(json) ?? [];
+            var commits = fixtures.Select(CreateDockerCommit).ToList();
+
+            return new DockerCommitFetchResult
+            {
+                Path = path,
+                Commits = commits,
+                Succeeded = true
+            };
+        }
+
+        private static Octokit.GitHubCommit CreateDockerCommit(CommitFixture fixture)
+        {
+            var author = new Octokit.Committer(fixture.AuthorName, "test@example.com", fixture.AuthorDate);
+            var commit = new Octokit.Commit(
+                null, null, null, null, fixture.Sha, null, null, "test", author, author,
+                null, [], 0, null);
+            var gitHubAuthor = new Octokit.Author(
+                fixture.AuthorName, 0, null, fixture.AvatarUrl, fixture.AuthorUrl, fixture.AuthorUrl,
+                null, null, null, "User", null, null, null, null, null, null, false);
+            return new Octokit.GitHubCommit(
+                null, null, null, null, fixture.Sha, null, null, gitHubAuthor, null, commit,
+                gitHubAuthor, fixture.AuthorUrl, null, [], []);
+        }
+
         private static string SanitizeRefForFilename(string refName)
         {
             // Replace characters that are invalid in filenames
@@ -165,5 +221,6 @@ namespace dotnetthanks_loader.Tests
         public string AuthorName { get; set; } = "";
         public string AuthorUrl { get; set; } = "";
         public string AvatarUrl { get; set; } = "";
+        public DateTimeOffset AuthorDate { get; set; }
     }
 }
