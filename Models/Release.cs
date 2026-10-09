@@ -105,12 +105,6 @@ namespace dotnetthanks_loader
         public int Count { get; set; }
     }
 
-    public class DockerVersionSnapshot
-    {
-        public string LatestSha { get; set; }
-        public List<Contributor> Contributors { get; set; } = new();
-    }
-
     public class DockerFolderDiscoveryResult
     {
         public IReadOnlyList<string> Folders { get; set; } = [];
