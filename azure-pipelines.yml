@@ -76,6 +76,7 @@ extends:
                 inputs:
                   command: publish
                   publishWebProjects: false
+                  projects: dotnetthanks-loader.csproj
                   arguments: "--configuration $(BuildConfiguration) --output $(Build.ArtifactStagingDirectory)"
                   zipAfterPublish: true
                   feedsToUse: config
