@@ -27,4 +27,4 @@ Each child repo, other repositories in the release, are processed in the same ma
 
 1. How to run different mode
    1. dotnet run [Full regeneration (all releases, cumulative contributors)]
-   2. dotnet run diff [Loads existing core.json and only processes new releases that haven't been processed yet. Updates the file with new contributors]
+   2. dotnet run diff [Loads existing core.json and processes new releases that haven't been processed yet. Refreshes dotnet-docker commit history for every .NET version on every run, updating Docker contribution totals without double-counting previously loaded commits. Updates the file when contribution data changes]

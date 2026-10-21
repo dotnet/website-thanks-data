@@ -157,13 +157,7 @@ namespace dotnetthanks_loader
                 var versionKey = kvp.Key; // e.g., "10.0"
                 var majorRelease = kvp.Value;
 
-                // Skip versions already fully processed for this repo
                 var processedKey = $"{RepoConstants.DotnetDockerRepo}-{versionKey}";
-                if (majorRelease.ProcessedReleases.Contains(processedKey))
-                {
-                    _logger.Info($"Skipping {RepoConstants.DotnetDockerRepo} for .NET {versionKey}, already processed");
-                    continue;
-                }
 
                 _logger.Info($"Processing {RepoConstants.DotnetDockerRepo} for .NET {versionKey}...");
 
@@ -174,7 +168,6 @@ namespace dotnetthanks_loader
                 _logger.Info($"Found {versionFolders.Count} {RepoConstants.DotnetDockerRepo} releases for .NET {versionKey}");
 
                 var allContributors = new Dictionary<string, Contributor>();
-                int totalCommits = 0;
                 // Fetch commits for all folders in parallel
                 var commitFetchTasks = versionFolders.Select(gitHubService.GetCommitsForPathAsync).ToList();
                 var commitsByFolder = await Task.WhenAll(commitFetchTasks);
@@ -219,7 +212,6 @@ namespace dotnetthanks_loader
                         else
                             repoItem.Count += 1;
                     }
-                    totalCommits++;
                 }
 
                 if (folderDiscovery.FailedPaths.Count > 0 || failedPaths.Count > 0)
@@ -241,28 +233,45 @@ namespace dotnetthanks_loader
                     if (existing == null)
                     {
                         majorRelease.Contributors.Add(contributor);
+                        majorRelease.Contributions += contributor.Count;
+                        hasChanges = true;
                     }
                     else
                     {
-                        // Update commit count
-                        existing.Count += contributor.Count;
-                        // Merge/update repo list
                         foreach (var repoItem in contributor.Repos)
                         {
                             var existingRepo = existing.Repos.FirstOrDefault(r => r.Name == repoItem.Name);
+                            // The fetched history is a snapshot, not an increment.
+                            var countDifference = repoItem.Count - (existingRepo?.Count ?? 0);
+                            existing.Count += countDifference;
+                            majorRelease.Contributions += countDifference;
+                            hasChanges |= countDifference != 0;
                             if (existingRepo == null)
                                 existing.Repos.Add(new RepoItem { Name = repoItem.Name, Count = repoItem.Count });
                             else
-                                existingRepo.Count += repoItem.Count;
+                                existingRepo.Count = repoItem.Count;
                         }
                     }
                 }
-                majorRelease.Contributions += totalCommits;
+
+                var contributorLinks = allContributors.Values.Select(c => c.Link).ToHashSet();
+                foreach (var existing in majorRelease.Contributors.ToList())
+                {
+                    var dockerRepo = existing.Repos.FirstOrDefault(r => r.Name == RepoConstants.DotnetDockerRepo);
+                    if (dockerRepo == null || contributorLinks.Contains(existing.Link))
+                        continue;
+
+                    existing.Count -= dockerRepo.Count;
+                    majorRelease.Contributions -= dockerRepo.Count;
+                    existing.Repos.Remove(dockerRepo);
+                    if (existing.Count == 0)
+                        majorRelease.Contributors.Remove(existing);
+                    hasChanges = true;
+                }
 
                 // Mark as processed
                 if (!majorRelease.ProcessedReleases.Contains(processedKey))
                     majorRelease.ProcessedReleases.Add(processedKey);
-                hasChanges |= totalCommits > 0;
             }
             return hasChanges;
         }
