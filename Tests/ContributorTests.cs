@@ -228,7 +228,7 @@ namespace dotnetthanks_loader.Tests
                 contributor => contributor.Link == "https://github.com/alice" && contributor.Count == 2);
             Assert.Contains(majorRelease.Contributors,
                 contributor => contributor.Link == "https://github.com/bob" && contributor.Count == 1);
-            Assert.Contains("dotnet-docker-10.0", majorRelease.ProcessedReleases);
+            Assert.Empty(majorRelease.ProcessedReleases);
         }
 
         [Theory]
@@ -248,7 +248,7 @@ namespace dotnetthanks_loader.Tests
             Assert.Equal(2, majorRelease.Contributors.Count);
             Assert.Equal(2, majorRelease.Contributors.Single(c => c.Name == "alice").Count);
             Assert.Equal(3, majorRelease.Contributors.Sum(c => Assert.Single(c.Repos).Count));
-            Assert.Single(majorRelease.ProcessedReleases);
+            Assert.Empty(majorRelease.ProcessedReleases);
         }
 
         [Fact]
@@ -275,6 +275,7 @@ namespace dotnetthanks_loader.Tests
             Assert.Equal(2, alice.Count);
             Assert.Equal(2, Assert.Single(alice.Repos).Count);
             Assert.Equal(1, majorRelease.Contributors.Single(c => c.Name == "charlie").Count);
+            Assert.Empty(majorRelease.ProcessedReleases);
         }
 
         [Fact]
@@ -304,7 +305,7 @@ namespace dotnetthanks_loader.Tests
             Assert.Equal(1, majorRelease.Contributors.Single(c => c.Name == "charlie").Count);
             Assert.Equal(2, bob.Count);
             Assert.Equal("sdk", Assert.Single(bob.Repos).Name);
-            Assert.Single(majorRelease.ProcessedReleases);
+            Assert.Empty(majorRelease.ProcessedReleases);
         }
 
         [Fact]
@@ -324,7 +325,28 @@ namespace dotnetthanks_loader.Tests
             Assert.Equal(2, majorRelease.Contributors.Single(c => c.Name == "alice").Count);
             Assert.Equal(1, majorRelease.Contributors.Single(c => c.Name == "bob").Count);
             Assert.DoesNotContain(majorRelease.Contributors, c => c.Name == "charlie");
-            Assert.Single(majorRelease.ProcessedReleases);
+            Assert.Empty(majorRelease.ProcessedReleases);
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public async Task DockerContributions_RemovesLegacyMarkersAndPreservesReleaseMarkers(bool fetchFails)
+        {
+            var majorReleases = CreateDockerMajorReleases();
+            var majorRelease = majorReleases["10.0"];
+            majorRelease.ProcessedReleases =
+                ["v10.0.1", "dotnet-docker-10.0", "aspire-v13.0.0", "dotnet-docker-9.0", "maui-10.0.0"];
+            if (fetchFails)
+                _mockGitHubService.FailedDockerCommitPaths.Add("src/runtime/10.0");
+
+            var hasChanges = await Program.ProcessDotnetDockerContributionsAsync(_mockGitHubService, majorReleases);
+
+            Assert.True(hasChanges);
+            Assert.Equal(new[] { "v10.0.1", "aspire-v13.0.0", "maui-10.0.0" }, majorRelease.ProcessedReleases);
+            Assert.Empty(majorRelease.Contributors);
+            Assert.Equal(0, majorRelease.Contributions);
+            Assert.False(await Program.ProcessDotnetDockerContributionsAsync(_mockGitHubService, majorReleases));
         }
 
         private static Dictionary<string, MajorRelease> CreateDockerMajorReleases()

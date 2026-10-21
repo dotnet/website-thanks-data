@@ -157,7 +157,8 @@ namespace dotnetthanks_loader
                 var versionKey = kvp.Key; // e.g., "10.0"
                 var majorRelease = kvp.Value;
 
-                var processedKey = $"{RepoConstants.DotnetDockerRepo}-{versionKey}";
+                hasChanges |= majorRelease.ProcessedReleases.RemoveAll(
+                    marker => marker.StartsWith($"{RepoConstants.DotnetDockerRepo}-", StringComparison.Ordinal)) > 0;
 
                 _logger.Info($"Processing {RepoConstants.DotnetDockerRepo} for .NET {versionKey}...");
 
@@ -268,10 +269,6 @@ namespace dotnetthanks_loader
                         majorRelease.Contributors.Remove(existing);
                     hasChanges = true;
                 }
-
-                // Mark as processed
-                if (!majorRelease.ProcessedReleases.Contains(processedKey))
-                    majorRelease.ProcessedReleases.Add(processedKey);
             }
             return hasChanges;
         }
