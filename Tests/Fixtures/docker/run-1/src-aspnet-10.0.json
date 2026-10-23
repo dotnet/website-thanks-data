@@ -1,0 +1,16 @@
+[
+  {
+    "Sha": "shared-run1",
+    "AuthorName": "alice",
+    "AuthorUrl": "https://github.com/alice",
+    "AvatarUrl": "https://avatars.example/alice",
+    "AuthorDate": "2026-01-02T00:00:00Z"
+  },
+  {
+    "Sha": "run1-bob",
+    "AuthorName": "bob",
+    "AuthorUrl": "https://github.com/bob",
+    "AvatarUrl": "https://avatars.example/bob",
+    "AuthorDate": "2026-01-01T00:00:00Z"
+  }
+]
