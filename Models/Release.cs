@@ -105,6 +105,19 @@ namespace dotnetthanks_loader
         public int Count { get; set; }
     }
 
+    public class DockerFolderDiscoveryResult
+    {
+        public IReadOnlyList<string> Folders { get; set; } = [];
+        public IReadOnlyList<string> FailedPaths { get; set; } = [];
+    }
+
+    public class DockerCommitFetchResult
+    {
+        public string Path { get; set; }
+        public IReadOnlyList<Octokit.GitHubCommit> Commits { get; set; } = [];
+        public bool Succeeded { get; set; }
+    }
+
     [DebuggerDisplay("Name = {Name}, Tag = {Tag}, Url = {Url}")]
     public class ChildRepo
     {
