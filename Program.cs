@@ -2,6 +2,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using System.Text.Encodings.Web;
 using System.Text.Json;
+using dotnetthanks_loader;
 
 namespace dotnetthanks_loader
 {
@@ -37,14 +38,14 @@ namespace dotnetthanks_loader
             var gitHubService = serviceProvider.GetRequiredService<IGitHubService>();
             var contributorService = serviceProvider.GetRequiredService<IContributorService>();
 
-            var repo = "core";
+            var repo = RepoConstants.DotnetRepo;
             var owner = "dotnet";
 
             // Load all releases using GitHubService in parallel
             _logger.Info("Loading releases...");
             var allReleasesTask = gitHubService.GetReleasesAsync(owner, repo);
-            var aspireReleasesTask = gitHubService.GetReleasesAsync("dotnet", "aspire");
-            var mauiReleasesTask = gitHubService.GetReleasesAsync("dotnet", "maui");
+            var aspireReleasesTask = gitHubService.GetReleasesAsync("dotnet", RepoConstants.AspireRepo);
+            var mauiReleasesTask = gitHubService.GetReleasesAsync("dotnet", RepoConstants.MauiRepo);
 
             await Task.WhenAll(allReleasesTask, aspireReleasesTask, mauiReleasesTask);
 
@@ -120,18 +121,156 @@ namespace dotnetthanks_loader
             _logger.Info($"\nProcessing Aspire releases... - {sortedAspireReleases.Count}");
             await ProcessExternalReleasesAsync(
                 gitHubService, contributorService, sortedAspireReleases, majorReleasesDictionary,
-                "aspire", VersionMapper.MapAspireVersionToDotNet);
+                RepoConstants.AspireRepo, VersionMapper.MapAspireVersionToDotNet);
 
             // Process MAUI releases
             _logger.Info($"\nProcessing MAUI releases... - {sortedMauiReleases.Count}");
             await ProcessExternalReleasesAsync(
                 gitHubService, contributorService, sortedMauiReleases, majorReleasesDictionary,
-                "maui", VersionMapper.MapMauiVersionToDotNet);
+                RepoConstants.MauiRepo, VersionMapper.MapMauiVersionToDotNet);
 
+            // Process dotnet-docker contributions for all .NET versions
+            _logger.Info($"\nProcessing {RepoConstants.DotnetDockerRepo} contributions for all .NET versions...");
+
+            await ProcessDotnetDockerContributionsAsync(gitHubService, majorReleasesDictionary);
+            
             // Write results
             var sortedList = majorReleasesDictionary.Values.ToList();
             File.WriteAllText($"./{repo}.json", JsonSerializer.Serialize(sortedList, _jsonOptions));
             _logger.Info($"\nResults written to ./{repo}.json");
+
+        }
+
+        /// <summary>
+        /// Process dotnet-docker repo contributions for all .NET versions.
+        /// </summary>
+        internal static async Task<bool> ProcessDotnetDockerContributionsAsync(
+            IGitHubService gitHubService,
+            Dictionary<string, MajorRelease> majorReleasesDictionary)
+        {
+            // Fetch all docker version folders once and filter per version in memory
+            var folderDiscovery = await gitHubService.ListAllDotnetDockerVersionFoldersAsync();
+            bool hasChanges = false;
+
+            foreach (var kvp in majorReleasesDictionary)
+            {
+                var versionKey = kvp.Key; // e.g., "10.0"
+                var majorRelease = kvp.Value;
+
+                hasChanges |= majorRelease.ProcessedReleases.RemoveAll(
+                    marker => marker.StartsWith($"{RepoConstants.DotnetDockerRepo}-", StringComparison.Ordinal)) > 0;
+
+                _logger.Info($"Processing {RepoConstants.DotnetDockerRepo} for .NET {versionKey}...");
+
+                // Filter folders for this version from the already-fetched list
+                var versionFolders = folderDiscovery.Folders
+                    .Where(path => path.EndsWith($"/{versionKey}", StringComparison.Ordinal))
+                    .ToList();
+                _logger.Info($"Found {versionFolders.Count} {RepoConstants.DotnetDockerRepo} releases for .NET {versionKey}");
+
+                var allContributors = new Dictionary<string, Contributor>();
+                // Fetch commits for all folders in parallel
+                var commitFetchTasks = versionFolders.Select(gitHubService.GetCommitsForPathAsync).ToList();
+                var commitsByFolder = await Task.WhenAll(commitFetchTasks);
+                var failedPaths = commitsByFolder
+                    .Where(result => !result.Succeeded)
+                    .Select(result => result.Path)
+                    .ToList();
+
+                // Flatten and deduplicate commits across version folders.
+                var orderedCommits = commitsByFolder
+                    .SelectMany(result => result.Commits)
+                    .Where(c => c?.Sha != null)
+                    .GroupBy(c => c.Sha, StringComparer.Ordinal)
+                    .Select(group => group.First())
+                    .OrderByDescending(c => c.Commit?.Author?.Date ?? DateTimeOffset.MinValue)
+                    .ThenByDescending(c => c.Sha, StringComparer.Ordinal)
+                    .ToList();
+                foreach (var commit in orderedCommits)
+                {
+                    var author = commit.Author;
+                    if (author == null || string.IsNullOrEmpty(author.Login)) continue;
+                    if (BotExclusionConstants.IsBot(author.Login)) continue;
+
+                    if (!allContributors.TryGetValue(author.Login, out var contributor))
+                    {
+                        contributor = new Contributor
+                        {
+                            Name = author.Login,
+                            Link = author.HtmlUrl,
+                            Avatar = author.AvatarUrl,
+                            Count = 1,
+                            Repos = [new RepoItem { Name = RepoConstants.DotnetDockerRepo, Count = 1 }]
+                        };
+                        allContributors[author.Login] = contributor;
+                    }
+                    else
+                    {
+                        contributor.Count += 1;
+                        var repoItem = contributor.Repos.Find(r => r.Name == RepoConstants.DotnetDockerRepo);
+                        if (repoItem == null)
+                            contributor.Repos.Add(new RepoItem { Name = RepoConstants.DotnetDockerRepo, Count = 1 });
+                        else
+                            repoItem.Count += 1;
+                    }
+                }
+
+                if (folderDiscovery.FailedPaths.Count > 0 || failedPaths.Count > 0)
+                {
+                    var allFailedPaths = folderDiscovery.FailedPaths.Concat(failedPaths).Distinct().ToList();
+                    _logger.Error(
+                        $"Skipping incomplete {RepoConstants.DotnetDockerRepo} data for .NET {versionKey}; " +
+                        $"{allFailedPaths.Count} path(s) failed: {string.Join(", ", allFailedPaths)}.");
+                    continue;
+                }
+
+                // Add or update contributors in MajorRelease
+                // Ensure Contributors list is initialized (defensive check for deserialized data)
+                majorRelease.Contributors ??= [];
+
+                foreach (var contributor in allContributors.Values)
+                {
+                    var existing = majorRelease.Contributors.FirstOrDefault(c => c.Link == contributor.Link);
+                    if (existing == null)
+                    {
+                        majorRelease.Contributors.Add(contributor);
+                        majorRelease.Contributions += contributor.Count;
+                        hasChanges = true;
+                    }
+                    else
+                    {
+                        foreach (var repoItem in contributor.Repos)
+                        {
+                            var existingRepo = existing.Repos.FirstOrDefault(r => r.Name == repoItem.Name);
+                            // The fetched history is a snapshot, not an increment.
+                            var countDifference = repoItem.Count - (existingRepo?.Count ?? 0);
+                            existing.Count += countDifference;
+                            majorRelease.Contributions += countDifference;
+                            hasChanges |= countDifference != 0;
+                            if (existingRepo == null)
+                                existing.Repos.Add(new RepoItem { Name = repoItem.Name, Count = repoItem.Count });
+                            else
+                                existingRepo.Count = repoItem.Count;
+                        }
+                    }
+                }
+
+                var contributorLinks = allContributors.Values.Select(c => c.Link).ToHashSet();
+                foreach (var existing in majorRelease.Contributors.ToList())
+                {
+                    var dockerRepo = existing.Repos.FirstOrDefault(r => r.Name == RepoConstants.DotnetDockerRepo);
+                    if (dockerRepo == null || contributorLinks.Contains(existing.Link))
+                        continue;
+
+                    existing.Count -= dockerRepo.Count;
+                    majorRelease.Contributions -= dockerRepo.Count;
+                    existing.Repos.Remove(dockerRepo);
+                    if (existing.Count == 0)
+                        majorRelease.Contributors.Remove(existing);
+                    hasChanges = true;
+                }
+            }
+            return hasChanges;
         }
 
         /// <summary>
@@ -198,7 +337,7 @@ namespace dotnetthanks_loader
                 _logger.Info($"\nProcessing Aspire diffs... - {aspireDiff.Count}");
                 await ProcessExternalReleasesAsync(
                     gitHubService, contributorService, aspireDiff, majorReleasesDictionary,
-                    "aspire", VersionMapper.MapAspireVersionToDotNet);
+                    RepoConstants.AspireRepo, VersionMapper.MapAspireVersionToDotNet);
             }
 
             // Process new MAUI releases
@@ -208,10 +347,12 @@ namespace dotnetthanks_loader
                 _logger.Info($"\nProcessing MAUI diffs... - {mauiDiff.Count}");
                 await ProcessExternalReleasesAsync(
                     gitHubService, contributorService, mauiDiff, majorReleasesDictionary,
-                    "maui", VersionMapper.MapMauiVersionToDotNet);
+                    RepoConstants.MauiRepo, VersionMapper.MapMauiVersionToDotNet);
             }
 
-            if (hasChanges)
+            bool dockerHasChanges = await ProcessDotnetDockerContributionsAsync(gitHubService, majorReleasesDictionary);
+
+            if (hasChanges || dockerHasChanges)
             {
                 var sortedList = majorReleasesDictionary.Values.OrderByDescending(o => o.Version).ToList();
                 File.WriteAllText($"./{repo}.json", JsonSerializer.Serialize(sortedList, _jsonOptions));

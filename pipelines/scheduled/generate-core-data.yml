@@ -58,10 +58,11 @@ extends:
                 clean: true
 
               - task: UseDotNet@2
-                displayName: Install .NET 10
+                displayName: Install .NET 11
                 inputs:
                   packageType: 'sdk'
-                  version: '10.x'
+                  version: '11.x'
+                  includePreviewVersions: true
               - template: pipelines/templates/create_github_token.yml@self
   
               - task: NuGetAuthenticate@1

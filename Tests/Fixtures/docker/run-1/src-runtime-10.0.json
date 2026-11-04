@@ -1,0 +1,23 @@
+[
+  {
+    "Sha": "run1-newest",
+    "AuthorName": "alice",
+    "AuthorUrl": "https://github.com/alice",
+    "AvatarUrl": "https://avatars.example/alice",
+    "AuthorDate": "2026-01-03T00:00:00Z"
+  },
+  {
+    "Sha": "shared-run1",
+    "AuthorName": "alice",
+    "AuthorUrl": "https://github.com/alice",
+    "AvatarUrl": "https://avatars.example/alice",
+    "AuthorDate": "2026-01-02T00:00:00Z"
+  },
+  {
+    "Sha": "run1-bot",
+    "AuthorName": "dependabot[bot]",
+    "AuthorUrl": "https://github.com/apps/dependabot",
+    "AvatarUrl": "https://avatars.example/bot",
+    "AuthorDate": "2026-01-01T12:00:00Z"
+  }
+]
