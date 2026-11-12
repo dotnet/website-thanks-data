@@ -28,7 +28,8 @@ namespace dotnetthanks_loader
             "net source-build bot",
             "nuget team bot",
             "dotnet-docker-bot",
-            "net-containers-bot[bot]"
+            "net-containers-bot[bot]",
+            "dotnet-renovate-bot"
         ];
 
         /// <summary>
